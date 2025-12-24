@@ -1,6 +1,4 @@
-
 {
-  "version": 2,
   "builds": [
     {
       "src": "main.py",
@@ -12,8 +10,5 @@
       "src": "/(.*)",
       "dest": "main.py"
     }
-  ],
-  "env": {
-    "PYTHON_VERSION": "3.9"
-  }
+  ]
 }
