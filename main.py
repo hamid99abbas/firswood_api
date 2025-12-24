@@ -3,7 +3,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -28,11 +29,9 @@ app.add_middleware(
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
 
+# Make API key optional during import, will check later
 if not GOOGLE_API_KEY:
-    raise ValueError("GOOGLE_API_KEY not found in environment variables")
-
-# Configure Gemini
-genai.configure(api_key=GOOGLE_API_KEY)
+    print("Warning: GOOGLE_API_KEY not found in environment variables")
 
 # Company knowledge base
 COMPANY_KNOWLEDGE = """
@@ -192,9 +191,17 @@ class SlackNotificationRequest(BaseModel):
     url: Optional[str] = None
 
 
-# Initialize Gemini model
-def get_gemini_model():
-    system_instruction = f"""You are the AI assistant for Firswood Intelligence, a specialized AI systems design and delivery practice.
+# Initialize Gemini client
+def get_gemini_client():
+    if not GOOGLE_API_KEY:
+        raise ValueError("GOOGLE_API_KEY not found in environment variables")
+
+    client = genai.Client(api_key=GOOGLE_API_KEY)
+    return client
+
+
+def get_system_instruction():
+    return f"""You are the AI assistant for Firswood Intelligence, a specialized AI systems design and delivery practice.
 
 {CORE_OPERATING_GUIDELINES}
 
@@ -213,11 +220,6 @@ Remember:
 
 Current date: {datetime.now().strftime('%B %d, %Y')}
 """
-
-    return genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
-        system_instruction=system_instruction
-    )
 
 
 @app.get("/")
@@ -244,23 +246,33 @@ async def chat(request: ChatRequest):
     Process chat message and return AI response
     """
     try:
-        # Initialize model
-        model = get_gemini_model()
+        # Initialize client
+        client = get_gemini_client()
 
         # Convert conversation history to Gemini format
-        chat_history = []
+        contents = []
         for msg in request.conversation_history:
             role = "user" if msg.role == "user" else "model"
-            chat_history.append({
-                "role": role,
-                "parts": [msg.content]
-            })
+            contents.append(types.Content(
+                role=role,
+                parts=[types.Part(text=msg.content)]
+            ))
 
-        # Start chat with history
-        chat = model.start_chat(history=chat_history)
+        # Add current message
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=request.message)]
+        ))
 
         # Generate response
-        response = chat.send_message(request.message)
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=get_system_instruction(),
+                temperature=0.7,
+            )
+        )
 
         return ChatResponse(
             response=response.text,
