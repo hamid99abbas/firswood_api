@@ -7,11 +7,11 @@ from google import genai
 from google.genai import types
 import os
 from datetime import datetime
-from dotenv import load_dotenv
 import requests
 import json
 
-load_dotenv()
+# DON'T use load_dotenv() on Vercel - it won't work
+# Vercel automatically injects environment variables
 
 # Initialize FastAPI
 app = FastAPI(title="Firswood Intelligence Chat API")
@@ -238,6 +238,18 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/debug/env")
+async def debug_env():
+    """Debug endpoint to check environment variables"""
+    return {
+        "google_api_key_exists": bool(os.getenv("GOOGLE_API_KEY")),
+        "google_api_key_length": len(os.getenv("GOOGLE_API_KEY", "")),
+        "slack_webhook_exists": bool(os.getenv("SLACK_WEBHOOK_URL")),
+        "all_env_keys": list(os.environ.keys()),
+        "python_version": os.sys.version
+    }
 
 
 @app.post("/api/chat", response_model=ChatResponse)
