@@ -17,15 +17,12 @@ app = FastAPI(title="Firswood Intelligence Chat API")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://firswoodintelligence.com",
-        "https://www.firswoodintelligence.com",
-        "http://localhost:3000"  # for local testing
-    ],
+    allow_origins=["*"],  # In production, replace with your domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # Environment variables - Get directly from os.environ
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
@@ -188,6 +185,13 @@ class SlackNotificationRequest(BaseModel):
     url: Optional[str] = None
 
 
+class BriefSubmission(BaseModel):
+    brief_data: dict
+    conversation_id: str
+    timestamp: str
+    url: Optional[str] = None
+
+
 # Initialize Gemini client
 def get_gemini_client():
     api_key = GOOGLE_API_KEY
@@ -283,7 +287,7 @@ async def chat(request: ChatRequest):
 
         # Generate response
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash-exp',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=get_system_instruction(),
@@ -411,6 +415,134 @@ async def notify_slack(request: SlackNotificationRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending Slack notification: {str(e)}")
+
+
+@app.post("/api/submit-brief")
+async def submit_brief(request: BriefSubmission):
+    """
+    Submit project brief and send to Slack
+    """
+    if not SLACK_WEBHOOK_URL:
+        raise HTTPException(status_code=500, detail="Slack webhook not configured")
+
+    try:
+        brief = request.brief_data
+
+        # Create Slack message with brief details
+        slack_message = {
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📋 New Project Brief Submitted",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Name:*\n{brief.get('fullName', 'N/A')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Email:*\n{brief.get('workEmail', 'N/A')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Company:*\n{brief.get('company', 'N/A')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Phone:*\n{brief.get('phone', 'N/A')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Project Type:*\n{brief.get('projectType', 'N/A')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Timeline:*\n{brief.get('timeline', 'N/A')}"
+                        }
+                    ]
+                },
+                {
+                    "type": "divider"
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*What they want to achieve:*\n{brief.get('goal', 'N/A')}"
+                    }
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Submitted:*\n{datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Page:*\n{request.url or 'N/A'}"
+                        }
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Conversation ID:* `{request.conversation_id}`"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "📧 Reply via Email",
+                                "emoji": True
+                            },
+                            "url": f"mailto:{brief.get('workEmail', '')}?subject=Re: Your Firswood Project Brief&body=Hi {brief.get('fullName', '')},%0D%0A%0D%0AThanks for submitting your project brief.%0D%0A%0D%0A",
+                            "style": "primary"
+                        },
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "📞 Call",
+                                "emoji": True
+                            },
+                            "url": f"tel:{brief.get('phone', '')}"
+                        }
+                    ]
+                }
+            ]
+        }
+
+        # Send to Slack
+        response = requests.post(
+            SLACK_WEBHOOK_URL,
+            json=slack_message,
+            headers={"Content-Type": "application/json"}
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="Failed to send brief to Slack")
+
+        return {
+            "success": True,
+            "message": "Brief submitted successfully",
+            "conversation_id": request.conversation_id
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error submitting brief: {str(e)}")
 
 
 if __name__ == "__main__":
