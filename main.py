@@ -1,31 +1,42 @@
-# main.py - FastAPI Backend for Firswood Chat Widget
+# main.py - Firswood Intelligence Chat API (Production Ready)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import os
-import sys
 from datetime import datetime
-import requests
-import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Initialize FastAPI
-app = FastAPI(title="Firswood Intelligence Chat API")
+app = FastAPI(
+    title="Firswood Intelligence Chat API",
+    description="Production-ready AI chat system powered by Google Gemini",
+    version="2.0.0"
+)
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your domain
+    allow_origins=["*"],  # In production, replace with ["https://www.firswoodintelligence.com"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Environment variables - Get directly from os.environ
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
+# Environment variables
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+if not GOOGLE_API_KEY:
+    raise ValueError("GOOGLE_API_KEY not found in environment variables")
+
+# Configure Gemini
+genai.configure(api_key=GOOGLE_API_KEY)
+
+# Discovery call link
+DISCOVERY_CALL_LINK = "https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M"
 
 # Company knowledge base
 COMPANY_KNOWLEDGE = """
@@ -40,6 +51,7 @@ Firswood Intelligence specializes in production-ready AI systems that deliver me
 - Location: 651a Mauldeth Road West, Chorlton Cum Hardy, Manchester, M21 7SA
 - Website: www.firswoodintelligence.com
 - LinkedIn: linkedin.com/in/haseebkhanproduct
+- Discovery Call: {DISCOVERY_CALL_LINK}
 
 ## Core Philosophy
 - Builder-led: Work directly with the person designing and building
@@ -93,9 +105,19 @@ Rapid builds for validation or fundraising. Get a functional core system to prov
 3. Production Deploy: Shipping live systems integrated into workflows
 4. Iteration: Ongoing optimization based on real-world usage
 
+## How to Get Started
+The best way to explore whether we're a good fit is through a discovery call. Book directly at: {DISCOVERY_CALL_LINK}
+
+We'll discuss:
+- Your specific challenge or opportunity
+- Whether AI is the right approach
+- Technical feasibility and architecture considerations
+- Realistic timelines and engagement models
+- Next steps if there's a good fit
+
 ## Contact
-- Book a call: calendar.app.google/kVahCoFGsHhgiSE76
-- Website form for inquiries
+- Book a discovery call: {DISCOVERY_CALL_LINK}
+- Email: hello@firswood.com
 - LinkedIn: linkedin.com/in/haseebkhanproduct
 """
 
@@ -124,13 +146,13 @@ You MAY:
 - Clarify business problems and contexts
 - Explain AI concepts in accessible terms
 - Outline system approaches and considerations
-- Guide users towards next steps in discovery
-- Discuss feasibility and readiness factors
+- Guide users towards booking a discovery call for detailed discussions
+- Discuss feasibility and readiness factors at a high level
 
 You MUST NOT:
 - Provide production code or technical implementations
 - Guarantee specific outcomes or results
-- Quote pricing, timelines, or project scope
+- Quote pricing, timelines, or project scope (these require discovery call)
 - Replace formal consultancy or discovery processes
 - Make commitments on behalf of Firswood Intelligence
 
@@ -138,15 +160,25 @@ You MUST NOT:
 - Keep responses SHORT (2-3 paragraphs maximum)
 - Use simple formatting (no complex markdown)
 - End with a clear call-to-action when appropriate
-- Suggest "Talk to a human" when questions get detailed or require scoping
+- When questions require detailed scoping or discussion, suggest booking a discovery call
 - Be conversational but professional
+- The discovery call button is available below your messages
+
+## Guiding Users to Discovery Calls
+When someone's questions indicate they're:
+- Evaluating Firswood for a specific project
+- Asking about timelines, pricing, or deliverables
+- Describing a detailed technical challenge
+- Ready to discuss specifics
+
+Frame it naturally: "This sounds like something we should explore properly in a discovery call. That way, we can discuss your specific requirements, technical considerations, and whether we're a good fit."
 
 ## Commercial & Engagement Positioning
 - Explain Firswood's approach without committing to specifics
-- Guide users towards discovery calls or structured engagement
-- Be transparent that detailed scoping requires conversation
-- Never quote fees, timelines, or deliverables
-- Position discovery as the proper first step for serious projects
+- Be transparent that detailed scoping requires a conversation
+- Never quote fees, timelines, or deliverables in chat
+- Position discovery call as the proper first step for serious projects
+- The discovery call is free, exploratory, and no-commitment
 
 ## Response Philosophy
 - Quality over speed
@@ -176,117 +208,93 @@ class ChatResponse(BaseModel):
     timestamp: str
 
 
-class SlackNotificationRequest(BaseModel):
-    conversation_id: str
-    user_email: str
-    user_name: str
-    conversation_history: List[Message]
-    timestamp: str
-    url: Optional[str] = None
-
-
-# Initialize Gemini client
-def get_gemini_client():
-    api_key = GOOGLE_API_KEY
-    if not api_key:
-        # Try one more time directly from environment
-        api_key = os.environ.get("GOOGLE_API_KEY")
-
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY not found in environment variables")
-
-    client = genai.Client(api_key=api_key)
-    return client
-
-
-def get_system_instruction():
-    return f"""You are the AI assistant for Firswood Intelligence, a specialized AI systems design and delivery practice.
+# Initialize Gemini model
+def get_gemini_model():
+    system_instruction = f"""You are the AI assistant for Firswood Intelligence, a specialized AI systems design and delivery practice.
 
 {CORE_OPERATING_GUIDELINES}
 
 Company Knowledge Base:
 {COMPANY_KNOWLEDGE}
 
+Discovery Call Link: {DISCOVERY_CALL_LINK}
+
 Remember:
 - Keep responses SHORT and concise (2-3 paragraphs max) - this is a web chat widget
 - You are calm, professional, and grounded
 - You use plain English, no buzzwords or hype
 - You acknowledge uncertainty and limitations
-- You guide towards discovery, not immediate solutions
-- Sometimes the right answer is "let's discuss this properly in a discovery call"
+- When questions require detailed discussion, naturally suggest booking a discovery call
+- Users can click the "Book Discovery Call" button below your messages
 - You never provide production code, quote prices, or guarantee outcomes
-- When questions get detailed, suggest the user talk to a human from the team
+- The discovery call is the right place for detailed scoping, timelines, and specific solutions
 
 Current date: {datetime.now().strftime('%B %d, %Y')}
 """
 
+    return genai.GenerativeModel(
+        model_name='gemini-2.0-flash-exp',
+        system_instruction=system_instruction
+    )
 
+
+# Root endpoint
 @app.get("/")
 async def root():
+    """API root endpoint with service information"""
     return {
         "service": "Firswood Intelligence Chat API",
         "status": "running",
+        "version": "2.0.0",
+        "discovery_call": DISCOVERY_CALL_LINK,
         "endpoints": {
             "chat": "/api/chat",
-            "slack": "/api/notify-slack",
             "health": "/health",
-            "debug": "/debug/env"
+            "docs": "/docs"
         }
     }
 
 
+# Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-
-@app.get("/debug/env")
-async def debug_env():
-    """Debug endpoint to check environment variables (REMOVE IN PRODUCTION)"""
+    """Health check endpoint for monitoring"""
     return {
-        "google_api_key_exists": bool(GOOGLE_API_KEY),
-        "google_api_key_length": len(GOOGLE_API_KEY) if GOOGLE_API_KEY else 0,
-        "google_api_key_prefix": GOOGLE_API_KEY[:10] + "..." if GOOGLE_API_KEY else "None",
-        "slack_webhook_exists": bool(SLACK_WEBHOOK_URL),
-        "env_keys_count": len(os.environ.keys()),
-        "has_google_key_in_environ": "GOOGLE_API_KEY" in os.environ,
-        "python_version": sys.version
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "gemini_configured": bool(GOOGLE_API_KEY),
+        "model": "gemini-2.0-flash-exp"
     }
 
 
+# Chat endpoint
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Process chat message and return AI response
+    Process chat message and return AI response powered by Google Gemini
+
+    - **message**: User's message text
+    - **conversation_history**: List of previous messages for context
+    - **conversation_id**: Unique conversation identifier
     """
     try:
-        # Initialize client
-        client = get_gemini_client()
+        # Initialize model
+        model = get_gemini_model()
 
         # Convert conversation history to Gemini format
-        contents = []
+        chat_history = []
         for msg in request.conversation_history:
             role = "user" if msg.role == "user" else "model"
-            contents.append(types.Content(
-                role=role,
-                parts=[types.Part(text=msg.content)]
-            ))
+            chat_history.append({
+                "role": role,
+                "parts": [msg.content]
+            })
 
-        # Add current message
-        contents.append(types.Content(
-            role="user",
-            parts=[types.Part(text=request.message)]
-        ))
+        # Start chat with history
+        chat = model.start_chat(history=chat_history)
 
         # Generate response
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=get_system_instruction(),
-                temperature=0.7,
-            )
-        )
+        response = chat.send_message(request.message)
 
         return ChatResponse(
             response=response.text,
@@ -295,121 +303,40 @@ async def chat(request: ChatRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating response: {str(e)}")
-
-
-@app.post("/api/notify-slack")
-async def notify_slack(request: SlackNotificationRequest):
-    """
-    Send notification to Slack when user requests human support
-    """
-    if not SLACK_WEBHOOK_URL:
-        raise HTTPException(status_code=500, detail="Slack webhook not configured")
-
-    try:
-        # Format conversation history
-        history_text = ""
-        for msg in request.conversation_history[-6:]:  # Last 6 messages
-            role = "👤 Visitor" if msg.role == "user" else "🤖 AI"
-            content = msg.content[:150] + "..." if len(msg.content) > 150 else msg.content
-            history_text += f"{role}: {content}\n\n"
-
-        # Create Slack message
-        slack_message = {
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "🆘 Human Support Requested",
-                        "emoji": True
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Name:*\n{request.user_name}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Email:*\n{request.user_email}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Time:*\n{datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Page:*\n{request.url or 'N/A'}"
-                        }
-                    ]
-                },
-                {
-                    "type": "divider"
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Recent Conversation:*\n```{history_text}```"
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Conversation ID:* `{request.conversation_id}`"
-                    }
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📧 Reply via Email",
-                                "emoji": True
-                            },
-                            "url": f"mailto:{request.user_email}?subject=Re: Firswood Chat Support&body=Hi {request.user_name},%0D%0A%0D%0AThanks for reaching out via our website chat.%0D%0A%0D%0A",
-                            "style": "primary"
-                        },
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📅 Book Call",
-                                "emoji": True
-                            },
-                            "url": "https://calendar.app.google/kVahCoFGsHhgiSE76"
-                        }
-                    ]
-                }
-            ]
-        }
-
-        # Send to Slack
-        response = requests.post(
-            SLACK_WEBHOOK_URL,
-            json=slack_message,
-            headers={"Content-Type": "application/json"}
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating response: {str(e)}"
         )
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Failed to send Slack notification")
+
+# Optional: Analytics endpoint to track discovery call clicks
+@app.post("/api/track-discovery-call")
+async def track_discovery_call(data: dict):
+    """
+    Optional endpoint to track when users click the discovery call button
+    Useful for analytics and conversion tracking
+    """
+    try:
+        # Log the event (you could send to analytics service here)
+        timestamp = datetime.now().isoformat()
+        conversation_id = data.get('conversation_id', 'unknown')
+
+        print(f"[{timestamp}] Discovery call clicked - Conversation: {conversation_id}")
 
         return {
             "success": True,
-            "message": "Team notified via Slack",
-            "conversation_id": request.conversation_id
+            "message": "Event tracked",
+            "timestamp": timestamp
+        }
+    except Exception as e:
+        # Don't fail if tracking fails
+        return {
+            "success": False,
+            "message": str(e)
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error sending Slack notification: {str(e)}")
 
-
+# Run with uvicorn for local development
 if __name__ == "__main__":
     import uvicorn
 
