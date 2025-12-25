@@ -131,7 +131,7 @@ Company Knowledge:
 {COMPANY_KNOWLEDGE}
 
 Current date: {datetime.now().strftime('%B %d, %Y')}
-""".format(COMPANY_KNOWLEDGE=COMPANY_KNOWLEDGE, datetime=datetime)
+"""
 
 
 # Pydantic models
