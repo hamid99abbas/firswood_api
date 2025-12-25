@@ -17,12 +17,15 @@ app = FastAPI(title="Firswood Intelligence Chat API")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your domain
+    allow_origins=[
+        "https://firswoodintelligence.com",
+        "https://www.firswoodintelligence.com",
+        "http://localhost:3000"  # for local testing
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Environment variables - Get directly from os.environ
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
