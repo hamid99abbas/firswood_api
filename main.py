@@ -1,24 +1,23 @@
-# main.py - FastAPI Backend for Firswood Chat Widget
+# main.py - FastAPI Backend with AI-Powered Data Extraction
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from google import genai
 from google.genai import types
 import os
-import sys
+import json
 from datetime import datetime
 import requests
-import json
 import traceback
 
 # Initialize FastAPI
-app = FastAPI(title="Firswood Intelligence Chat API")
+app = FastAPI(title="Firswood Intelligence Chat API - AI Extraction")
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,127 +32,87 @@ COMPANY_KNOWLEDGE = """
 # Firswood Intelligence - Company Knowledge Base
 
 ## Company Overview
-Firswood Intelligence specializes in production-ready AI systems that deliver measurable business value. We bridge the gap between AI experiments and operational systems.
+Firswood Intelligence specializes in production-ready AI systems that deliver measurable business value.
 
 **Company Details:**
 - Company: Firswood Digital Services Limited
-- Company No: 11608317
-- Location: 651a Mauldeth Road West, Chorlton Cum Hardy, Manchester, M21 7SA
+- Location: Manchester, UK
 - Website: www.firswoodintelligence.com
-- LinkedIn: linkedin.com/in/haseebkhanproduct
-
-## Core Philosophy
-- Builder-led: Work directly with the person designing and building
-- Commercially grounded: Every decision considers cost, scale, and ROI
-- Production-first: Systems meant for daily use, not demos
-- Strategic partner mindset: Think like owners, not vendors
 
 ## What We Build
-
-### 1. Autonomous AI Agents
-Multi-agent systems that plan, delegate, verify, and refine outputs across research, analysis, proposal generation, and internal assistants.
-
-### 2. RAG & Enterprise Search
-Secure, source-grounded chat over documents, databases, and APIs with semantic search, traceability, and natural-language querying.
-
-### 3. Conversational AI
-Production chatbots that connect to live systems, fetch real data, and act across web, Slack, Telegram, or internal tools.
-
-### 4. Forecasting & Decision Intelligence
-Sales, demand, and inventory forecasts with automated data prep, time-series models, and executive-ready insight dashboards.
-
-### 5. Real-Time Dashboards & Reporting
-Natural-language access to metrics, AI-generated reports, and live integrations (Stripe, Notion, Sheets, internal APIs) with agent delegation.
-
-### 6. Computer Vision & On-Device AI
-Privacy-aware, real-time vision and mobile edge models for posture, movement, and activity detection with low latency and offline capability.
-
-### 7. Full-Stack AI Product Development
-End-to-end builds: backend AI services, secure APIs, cloud deploys (AWS, Vercel), and mobile/web apps (Flutter, Firebase) from MVP to production.
+1. Autonomous AI Agents
+2. RAG & Enterprise Search
+3. Conversational AI
+4. Forecasting & Decision Intelligence
+5. Real-Time Dashboards & Reporting
+6. Computer Vision & On-Device AI
+7. Full-Stack AI Product Development
 
 ## Engagement Models
-
-### 1. Fixed-Scope Builds
-Perfect for defined problems. We design, build, and deploy a specific system for a fixed price and timeline.
-
-### 2. Development Partnerships
-Ongoing AI development. We act as your specialized engineering arm for continuous iteration.
-
-### 3. High-Impact MVPs
-Rapid builds for validation or fundraising. Get a functional core system to prove the value proposition.
-
-## Ideal Clients
-- Founders building AI-first products
-- Businesses ready to automate at scale
-- Teams with manual process bottlenecks
-- Organizations with valuable unused data
-
-## The Firswood Approach
-1. Problem Definition: Understanding core operational bottlenecks before coding
-2. System Architecture: Designing robust, scalable data pipelines
-3. Production Deploy: Shipping live systems integrated into workflows
-4. Iteration: Ongoing optimization based on real-world usage
-
-## Contact
-- Book a call: calendar.app.google/kVahCoFGsHhgiSE76
-- Website form for inquiries
-- LinkedIn: linkedin.com/in/haseebkhanproduct
+1. Fixed-Scope Builds
+2. Development Partnerships
+3. High-Impact MVPs
 """
 
 CORE_OPERATING_GUIDELINES = """
 # Firswood Intelligence AI Chatbot Operating Guidelines
 
 ## Identity & Role
-You are a conversational AI assistant for Firswood Intelligence. Your goal is to understand the user's project through natural conversation while subtly gathering key information.
+You are a conversational AI assistant for Firswood Intelligence. Your goal is to understand the user's project through natural conversation.
 
-## PRIMARY OBJECTIVE: Natural, Engaging Conversation
-Have a genuine, helpful conversation about their project. Through natural discussion, learn:
+## Conversation Style:
+1. **KEEP RESPONSES ULTRA SHORT**: Maximum 2 sentences, under 40 words
+2. **ONE QUESTION MAXIMUM** per response
+3. **NEVER REPEAT USER INPUT**: When user says "Hamid", respond "Nice to meet you, Hamid!" NOT "Hamidhamid"
+4. **BE NATURAL**: Have a genuine conversation, not an interrogation
+5. **NO VERBOSE EXPLANATIONS**: Get to the point fast
+
+## Information to Gather Naturally:
 - Their name
 - Work email
 - Company name
 - Phone number (optional)
-- Project details
-
-## Conversation Style - CRITICAL RULES:
-1. **KEEP RESPONSES ULTRA SHORT**: Maximum 2 sentences, ideally 1 sentence. Under 40 words.
-2. **ONE QUESTION MAXIMUM** per response
-3. **NO REPETITION**: If user says "8", write "8" not "88". Listen carefully.
-4. **NO VERBOSE EXPLANATIONS**: Get to the point fast
-5. **NATURAL FLOW**: Don't jump around topics randomly
-
-## How to Gather Information:
-
-**DO:**
-- Ask ONE simple question at a time
-- Listen to EXACT user input (if they say "8", acknowledge "8" not "88")
-- Keep responses conversational and brief
-- Show you're listening by referencing what they just said
-
-**DON'T:**
-- Repeat or rephrase what user just said unnecessarily
-- Ask multiple questions in one response
-- Write long explanations
-- Mishear numbers or names
-- Be overly formal
-
-## Example Good Responses:
-User: "I need a chatbot"
-You: "Great! What problem will it solve?"
-
-User: "Customer support"
-You: "Got it. What kind of support queries?"
-
-User: "My company is TechCorp"
-You: "Thanks! What's your role at TechCorp?"
-
-User: "We have 8 people"
-You: "Perfect. What's your current process?"
+- Project type and goals
+- Timeline
 
 ## Key Rules:
 - Maximum 40 words per response
 - ONE question per response
-- Listen carefully to exact user input
-- No repetition or verbose explanations
+- Never echo user input
+- Keep it conversational and warm
+"""
+
+# NEW: Data extraction prompt
+DATA_EXTRACTION_PROMPT = """You are a data extraction AI. Analyze the conversation and extract key information.
+
+Return a JSON object with these fields (use null if not found):
+{
+  "fullName": "string or null",
+  "workEmail": "string or null",
+  "company": "string or null",
+  "phone": "string or null",
+  "projectType": "string or null",
+  "timeline": "string or null",
+  "goal": "string or null"
+}
+
+EXTRACTION RULES:
+1. **fullName**: Extract from phrases like "my name is X", "I'm X", "this is X", or standalone name responses. Capitalize properly.
+2. **workEmail**: Extract any valid email address (name@domain.com)
+3. **company**: Extract company name from "at X", "work at X", "company is X", or standalone company responses
+4. **phone**: Extract phone numbers in any format
+5. **projectType**: Categorize into: "Customer Support Chatbot", "Product Support Chatbot", "Order Tracking", "Document Q&A", "Analytics Dashboard", "Automation", "AI Platform", "MVP Development", or "Other"
+6. **timeline**: Standardize to: "ASAP", "1 month", "1-3 months", "3-6 months", "6+ months", or null
+7. **goal**: Extract the main problem/goal in 1-2 sentences (not questions, meaningful statements only)
+
+IMPORTANT:
+- Be smart about context: if AI asks "what's your name?" and user says "john", extract "John" as fullName
+- Handle typos: "1 moth" = "1 month"
+- Single word responses after questions are likely the answer to that question
+- Ignore filler words like "yes", "no", "okay", "sure"
+- Return ONLY valid JSON, no markdown, no explanation
+
+Conversation to analyze:
 """
 
 
@@ -175,15 +134,12 @@ class ChatResponse(BaseModel):
     response: str
     conversation_id: str
     timestamp: str
+    extracted_data: Optional[Dict[str, Any]] = None
 
 
-class SlackNotificationRequest(BaseModel):
-    conversation_id: str
-    user_email: str
-    user_name: str
+class ExtractionRequest(BaseModel):
     conversation_history: List[Message]
-    timestamp: str
-    url: Optional[str] = None
+    conversation_id: str
 
 
 class BriefSubmission(BaseModel):
@@ -197,17 +153,12 @@ class BriefSubmission(BaseModel):
 def get_gemini_client():
     api_key = GOOGLE_API_KEY
     if not api_key:
-        api_key = os.environ.get("GOOGLE_API_KEY")
-
-    if not api_key:
         raise ValueError("GOOGLE_API_KEY not found in environment variables")
-
-    client = genai.Client(api_key=api_key)
-    return client
+    return genai.Client(api_key=api_key)
 
 
 def get_system_instruction(additional_context=""):
-    base_instruction = f"""You are the AI assistant for Firswood Intelligence, a specialized AI systems design and delivery practice.
+    base_instruction = f"""You are the AI assistant for Firswood Intelligence.
 
 {CORE_OPERATING_GUIDELINES}
 
@@ -218,29 +169,86 @@ Remember:
 - Keep responses VERY SHORT (2-3 sentences max, under 60 words)
 - Be conversational and warm
 - ONE question per message maximum
-- Never mention "discovery calls" early in conversation
-- Gather information naturally through genuine conversation
-- Show expertise through insights, not corporate speak
-- Build trust before asking for contact info
+- NEVER repeat or echo back user input
+- Build trust through natural conversation
 
 Current date: {datetime.now().strftime('%B %d, %Y')}
 """
-
     if additional_context:
         base_instruction += f"\n\nAdditional Context: {additional_context}"
-
     return base_instruction
+
+
+# NEW: AI-powered data extraction function
+async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str, Any]:
+    """Use AI to extract structured data from conversation"""
+    try:
+        print("[EXTRACT] Starting AI-powered extraction...")
+
+        # Format conversation for extraction
+        conversation_text = ""
+        for msg in conversation_history:
+            role = "User" if msg.role == "user" else "AI Assistant"
+            conversation_text += f"{role}: {msg.content}\n"
+
+        # Create extraction prompt
+        full_prompt = DATA_EXTRACTION_PROMPT + "\n" + conversation_text
+
+        # Call Gemini for extraction
+        client = get_gemini_client()
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[types.Content(
+                role="user",
+                parts=[types.Part(text=full_prompt)]
+            )],
+            config=types.GenerateContentConfig(
+                temperature=0.1,  # Low temperature for consistent extraction
+                response_mime_type="application/json"  # Force JSON output
+            )
+        )
+
+        # Parse JSON response
+        extracted_text = response.text.strip()
+
+        # Remove markdown code blocks if present
+        if extracted_text.startswith("```json"):
+            extracted_text = extracted_text[7:]
+        if extracted_text.startswith("```"):
+            extracted_text = extracted_text[3:]
+        if extracted_text.endswith("```"):
+            extracted_text = extracted_text[:-3]
+
+        extracted_data = json.loads(extracted_text.strip())
+
+        print(f"[EXTRACT] Successfully extracted: {json.dumps(extracted_data, indent=2)}")
+        return extracted_data
+
+    except Exception as e:
+        print(f"[ERROR] Extraction failed: {str(e)}")
+        traceback.print_exc()
+        # Return empty data on failure
+        return {
+            "fullName": None,
+            "workEmail": None,
+            "company": None,
+            "phone": None,
+            "projectType": None,
+            "timeline": None,
+            "goal": None
+        }
 
 
 @app.get("/")
 async def root():
     return {
-        "service": "Firswood Intelligence Chat API",
+        "service": "Firswood Intelligence Chat API - AI Extraction",
         "status": "running",
-        "version": "1.0.0",
+        "version": "3.0.0",
+        "features": ["AI-powered data extraction", "Natural conversation", "Smart lead capture"],
         "endpoints": {
             "chat": "/api/chat",
-            "slack_notify": "/api/notify-slack",
+            "extract": "/api/extract-data",
             "submit_brief": "/api/submit-brief",
             "health": "/health"
         }
@@ -249,33 +257,30 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    health_status = {
+    return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "google_api_configured": bool(GOOGLE_API_KEY),
         "slack_webhook_configured": bool(SLACK_WEBHOOK_URL)
     }
-    return health_status
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Process chat message and return AI response"""
+    """Process chat message and return AI response with extracted data"""
     try:
         print(f"[CHAT] Processing message from conversation: {request.conversation_id}")
 
-        # Initialize client
         client = get_gemini_client()
 
-        # Convert conversation history to Gemini format
+        # Only send USER messages to avoid echoing
         contents = []
         for msg in request.conversation_history:
-            role = "user" if msg.role == "user" else "model"
-            contents.append(types.Content(
-                role=role,
-                parts=[types.Part(text=msg.content)]
-            ))
+            if msg.role == "user":
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=msg.content)]
+                ))
 
         # Add current message
         contents.append(types.Content(
@@ -285,22 +290,29 @@ async def chat(request: ChatRequest):
 
         # Generate response
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash-exp',
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=get_system_instruction(),
+                system_instruction=get_system_instruction(request.system_context or ""),
                 temperature=0.7,
             )
         )
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
-        print(f"[CHAT] Response generated successfully for: {conversation_id}")
+        # NEW: Extract data using AI after every message
+        all_messages = request.conversation_history + [
+            Message(role="user", content=request.message, timestamp=datetime.now().isoformat())
+        ]
+        extracted_data = await extract_data_with_ai(all_messages)
+
+        print(f"[CHAT] Response generated with extracted data")
 
         return ChatResponse(
             response=response.text,
             conversation_id=conversation_id,
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
+            extracted_data=extracted_data
         )
 
     except Exception as e:
@@ -312,208 +324,71 @@ async def chat(request: ChatRequest):
         )
 
 
-@app.post("/api/notify-slack")
-async def notify_slack(request: SlackNotificationRequest):
-    """Send notification to Slack when user requests human support"""
-
-    print(f"[SLACK_NOTIFY] Processing notification for: {request.user_email}")
-
-    if not SLACK_WEBHOOK_URL:
-        print("[ERROR] Slack webhook not configured")
-        raise HTTPException(
-            status_code=500,
-            detail="Slack webhook not configured"
-        )
-
+@app.post("/api/extract-data")
+async def extract_data(request: ExtractionRequest):
+    """Extract structured data from conversation using AI"""
     try:
-        # Format conversation history
-        history_text = ""
-        for msg in request.conversation_history[-6:]:  # Last 6 messages
-            role = "👤 Visitor" if msg.role == "user" else "🤖 AI"
-            content = msg.content[:150] + "..." if len(msg.content) > 150 else msg.content
-            history_text += f"{role}: {content}\n\n"
+        print(f"[EXTRACT_API] Processing extraction for: {request.conversation_id}")
 
-        # Safe timestamp handling
-        try:
-            formatted_time = datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')
-        except Exception as e:
-            print(f"[WARN] Timestamp parsing error: {e}")
-            formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # Create Slack message
-        slack_message = {
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "🆘 Human Support Requested",
-                        "emoji": True
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Name:*\n{request.user_name}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Email:*\n{request.user_email}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Time:*\n{formatted_time}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Page:*\n{request.url or 'N/A'}"
-                        }
-                    ]
-                },
-                {
-                    "type": "divider"
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Recent Conversation:*\n```{history_text}```"
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Conversation ID:* `{request.conversation_id}`"
-                    }
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📧 Reply via Email",
-                                "emoji": True
-                            },
-                            "url": f"mailto:{request.user_email}?subject=Re: Firswood Chat Support&body=Hi {request.user_name},%0D%0A%0D%0AThanks for reaching out via our website chat.%0D%0A%0D%0A",
-                            "style": "primary"
-                        },
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📅 Book Call",
-                                "emoji": True
-                            },
-                            "url": "https://calendar.app.google/kVahCoFGsHhgiSE76"
-                        }
-                    ]
-                }
-            ]
-        }
-
-        # Send to Slack
-        response = requests.post(
-            SLACK_WEBHOOK_URL,
-            json=slack_message,
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to send Slack notification: {response.status_code}"
-            )
-
-        print(f"[SLACK_NOTIFY] Notification sent successfully")
+        extracted_data = await extract_data_with_ai(request.conversation_history)
 
         return {
             "success": True,
-            "message": "Team notified via Slack",
-            "conversation_id": request.conversation_id
+            "conversation_id": request.conversation_id,
+            "extracted_data": extracted_data,
+            "timestamp": datetime.now().isoformat()
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"[ERROR] Slack notification error: {str(e)}")
+        print(f"[ERROR] Extract API error: {str(e)}")
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Error sending Slack notification: {str(e)}"
+            detail=f"Error extracting data: {str(e)}"
         )
 
 
 @app.post("/api/submit-brief")
 async def submit_brief(request: BriefSubmission):
-    """Submit project brief and send to Slack"""
-
+    """Submit project brief to Slack"""
     print(f"[BRIEF_SUBMIT] Processing brief submission")
-    print(f"[BRIEF_SUBMIT] Conversation ID: {request.conversation_id}")
-    print(f"[BRIEF_SUBMIT] Brief data keys: {list(request.brief_data.keys())}")
 
     if not SLACK_WEBHOOK_URL:
-        print("[ERROR] Slack webhook not configured")
-        raise HTTPException(
-            status_code=500,
-            detail="Slack webhook not configured"
-        )
+        raise HTTPException(status_code=500, detail="Slack webhook not configured")
 
     try:
         brief = request.brief_data
 
-        # Helper function to clean text for Slack
-        def clean_for_slack(text, max_length=500):
-            """Clean and truncate text for Slack Block Kit"""
-            if not text or text == 'N/A':
+        # Clean function
+        def clean(text, max_length=500):
+            if not text or text == 'N/A' or text == 'null':
                 return 'N/A'
-
-            # Convert to string and strip
             text = str(text).strip()
-
-            # Escape special characters for Slack
-            text = text.replace('&', '&amp;')
-            text = text.replace('<', '&lt;')
-            text = text.replace('>', '&gt;')
-
-            # Remove any control characters
+            text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             text = ''.join(char for char in text if ord(char) >= 32 or char == '\n')
-
-            # Truncate if needed
             if len(text) > max_length:
                 text = text[:max_length] + '...'
-
             return text
 
-        # Safe value extraction with defaults and cleaning
-        full_name = clean_for_slack(brief.get('fullName', 'N/A'), 100)
-        work_email = clean_for_slack(brief.get('workEmail', 'N/A'), 100)
-        company = clean_for_slack(brief.get('company', 'N/A'), 100)
-        phone = clean_for_slack(brief.get('phone', 'N/A'), 50)
-        project_type = clean_for_slack(brief.get('projectType', 'N/A'), 100)
-        timeline = clean_for_slack(brief.get('timeline', 'N/A'), 50)
-        goal = clean_for_slack(brief.get('goal', 'N/A'), 400)
+        # Extract and clean data
+        full_name = clean(brief.get('fullName', 'N/A'), 100)
+        work_email = clean(brief.get('workEmail', 'N/A'), 100)
+        company = clean(brief.get('company', 'N/A'), 100)
+        phone = clean(brief.get('phone', 'N/A'), 50)
+        project_type = clean(brief.get('projectType', 'N/A'), 100)
+        timeline = clean(brief.get('timeline', 'N/A'), 50)
+        goal = clean(brief.get('goal', 'N/A'), 400)
 
-        print(f"[BRIEF_SUBMIT] Name: {full_name}, Email: {work_email}, Company: {company}")
-        print(f"[BRIEF_SUBMIT] Goal length: {len(goal)}")
-
-        # Safe timestamp handling
+        # Timestamp
         try:
             formatted_time = datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')
-        except Exception as e:
-            print(f"[WARN] Timestamp parsing error: {e}")
+        except:
             formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Create SIMPLE Slack message - just text, no fancy blocks
+        # Create Slack message
         slack_message = {
             "text": (
-                f"🎉 *NEW LEAD!*\n\n"
+                f"🎉 *NEW LEAD - AI EXTRACTED!*\n\n"
                 f"👤 *Name:* {full_name}\n"
                 f"📧 *Email:* {work_email}\n"
                 f"🏢 *Company:* {company}\n"
@@ -521,15 +396,11 @@ async def submit_brief(request: BriefSubmission):
                 f"💼 *Project:* {project_type}\n"
                 f"📅 *Timeline:* {timeline}\n\n"
                 f"🎯 *Goal:*\n{goal}\n\n"
+                f"⏰ *Time:* {formatted_time}\n"
                 f"🆔 *Conversation ID:* {request.conversation_id}\n"
                 f"🔗 *Page:* {request.url or 'N/A'}"
             )
         }
-
-        print(f"[BRIEF_SUBMIT] Sending to Slack...")
-
-        # Log the payload for debugging
-        print(f"[BRIEF_SUBMIT] Slack payload size: {len(json.dumps(slack_message))} bytes")
 
         # Send to Slack
         response = requests.post(
@@ -541,11 +412,9 @@ async def submit_brief(request: BriefSubmission):
 
         if response.status_code != 200:
             print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
-            # Log the full payload that failed
-            print(f"[ERROR] Failed payload: {json.dumps(slack_message, indent=2)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to send brief to Slack: {response.status_code} - {response.text}"
+                detail=f"Failed to send to Slack: {response.status_code}"
             )
 
         print(f"[BRIEF_SUBMIT] Brief submitted successfully to Slack")
