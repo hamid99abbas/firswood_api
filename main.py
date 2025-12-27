@@ -243,16 +243,44 @@ We'll discuss your project in detail and outline next steps."
 
 DATA_EXTRACTION_PROMPT = """Extract information from this conversation into JSON.
 
-RULES:
-1. **fullName**: Extract from "my name is X", "I'm X", or single-word name response
-2. **workEmail**: Any email address
-3. **company**: Extract from "company is X", "work at X", or single-word company response
-4. **phone**: Any phone number
-5. **projectType**: Categorize the project
-6. **timeline**: Standardize to: "ASAP", "1 month", "1-3 months", "3-6 months", "6+ months"
-7. **goal**: Main problem/goal in 1-2 sentences
+EXTRACTION RULES:
 
-Return ONLY valid JSON:
+1. **fullName**: Look for explicit name statements
+   - "my name is Hamid" → "Hamid"
+   - "I'm John Smith" → "John Smith"
+   - Capitalize properly
+
+2. **workEmail**: Any email address format
+
+3. **company**: IMPORTANT - Look carefully for company name
+   - If AI asks "what company?" and user responds with a single word → that's the company
+   - "company is Emebron" → "Emebron"
+   - "we are Acme Corp" → "Acme Corp"
+   - User response after "what company are you with?" → that's the company
+   - ALWAYS capitalize first letter
+
+4. **phone**: Any phone number
+
+5. **projectType**: Categorize based on description
+   - Customer support → "Customer Support Chatbot"
+   - Order tracking → "Order Tracking System"
+   - Document questions → "Document Q&A Chatbot"
+   - General chatbot → "Chatbot"
+
+6. **timeline**: Extract and standardize
+   - "3 months", "3-4 months" → "1-3 months"
+   - "1 month" → "1 month"
+   - "6 months" → "3-6 months"
+   - "ASAP", "urgent" → "ASAP"
+
+7. **goal**: Summarize main problem/objective in 1-2 sentences
+
+CONTEXT AWARENESS:
+- Pay special attention to single-word responses after questions
+- If AI asks "What company?" and user says "emebron" → company is "Emebron"
+- If AI asks "timeline?" and user says "3 4 months" → timeline is "1-3 months"
+
+Return ONLY valid JSON (no markdown, no explanations):
 {
   "fullName": "string or null",
   "workEmail": "string or null",
@@ -341,7 +369,7 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash',
             contents=[types.Content(
                 role="user",
                 parts=[types.Part(text=full_prompt)]
@@ -377,14 +405,27 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
         }
 
 
-def should_submit_brief(extracted_data: Dict[str, Any], message_count: int) -> bool:
+def should_submit_brief(extracted_data: Dict[str, Any], message_count: int, current_phase: str) -> bool:
     """Check if we have enough info to submit"""
+    # Only submit in phase 2 and after asking about discovery call
+    if current_phase != "phase2":
+        return False
+
     has_email = bool(extracted_data.get('workEmail'))
     has_project = bool(extracted_data.get('projectType') or extracted_data.get('goal'))
-    has_enough_msgs = message_count >= 5
+    has_company = bool(extracted_data.get('company'))
+    has_timeline = bool(extracted_data.get('timeline'))
+    has_name = bool(extracted_data.get('fullName'))
 
-    result = has_email and has_project and has_enough_msgs
-    print(f"[BRIEF_CHECK] Email: {has_email}, Project: {has_project}, Msgs: {has_enough_msgs} → {result}")
+    # Need at least: email, project, name, company OR timeline
+    # And must have asked enough questions (at least 6 messages)
+    has_minimum = has_email and has_project and has_name and (has_company or has_timeline)
+    has_enough_msgs = message_count >= 6
+
+    result = has_minimum and has_enough_msgs
+
+    print(
+        f"[BRIEF_CHECK] Email: {has_email}, Project: {has_project}, Name: {has_name}, Company: {has_company}, Timeline: {has_timeline}, Msgs: {message_count}/6 → Submit: {result}")
     return result
 
 
@@ -458,7 +499,7 @@ async def chat(request: ChatRequest):
         # Generate response
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash-exp',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -472,10 +513,11 @@ async def chat(request: ChatRequest):
 
         if current_phase == "phase2":
             temp_history = request.conversation_history + [
-                Message(role="user", content=request.message)
+                Message(role="user", content=request.message),
+                Message(role="assistant", content=response.text)
             ]
             extracted_data = await extract_data_with_ai(temp_history)
-            should_submit = should_submit_brief(extracted_data, message_count)
+            should_submit = should_submit_brief(extracted_data, message_count, current_phase)
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
