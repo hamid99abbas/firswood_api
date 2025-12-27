@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 import requests
 import json
+import traceback
 
 # Initialize FastAPI
 app = FastAPI(title="Firswood Intelligence Chat API")
@@ -23,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Environment variables - Get directly from os.environ
+# Environment variables
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
 
@@ -196,7 +197,6 @@ class BriefSubmission(BaseModel):
 def get_gemini_client():
     api_key = GOOGLE_API_KEY
     if not api_key:
-        # Try one more time directly from environment
         api_key = os.environ.get("GOOGLE_API_KEY")
 
     if not api_key:
@@ -237,40 +237,34 @@ async def root():
     return {
         "service": "Firswood Intelligence Chat API",
         "status": "running",
+        "version": "1.0.0",
         "endpoints": {
             "chat": "/api/chat",
-            "slack": "/api/notify-slack",
-            "health": "/health",
-            "debug": "/debug/env"
+            "slack_notify": "/api/notify-slack",
+            "submit_brief": "/api/submit-brief",
+            "health": "/health"
         }
     }
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-
-@app.get("/debug/env")
-async def debug_env():
-    """Debug endpoint to check environment variables (REMOVE IN PRODUCTION)"""
-    return {
-        "google_api_key_exists": bool(GOOGLE_API_KEY),
-        "google_api_key_length": len(GOOGLE_API_KEY) if GOOGLE_API_KEY else 0,
-        "google_api_key_prefix": GOOGLE_API_KEY[:10] + "..." if GOOGLE_API_KEY else "None",
-        "slack_webhook_exists": bool(SLACK_WEBHOOK_URL),
-        "env_keys_count": len(os.environ.keys()),
-        "has_google_key_in_environ": "GOOGLE_API_KEY" in os.environ,
-        "python_version": sys.version
+    """Health check endpoint"""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "google_api_configured": bool(GOOGLE_API_KEY),
+        "slack_webhook_configured": bool(SLACK_WEBHOOK_URL)
     }
+    return health_status
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """
-    Process chat message and return AI response
-    """
+    """Process chat message and return AI response"""
     try:
+        print(f"[CHAT] Processing message from conversation: {request.conversation_id}")
+
         # Initialize client
         client = get_gemini_client()
 
@@ -291,7 +285,7 @@ async def chat(request: ChatRequest):
 
         # Generate response
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.5-flash',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=get_system_instruction(),
@@ -299,23 +293,37 @@ async def chat(request: ChatRequest):
             )
         )
 
+        conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
+
+        print(f"[CHAT] Response generated successfully for: {conversation_id}")
+
         return ChatResponse(
             response=response.text,
-            conversation_id=request.conversation_id or f"conv_{datetime.now().timestamp()}",
+            conversation_id=conversation_id,
             timestamp=datetime.now().isoformat()
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating response: {str(e)}")
+        print(f"[ERROR] Chat error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating response: {str(e)}"
+        )
 
 
 @app.post("/api/notify-slack")
 async def notify_slack(request: SlackNotificationRequest):
-    """
-    Send notification to Slack when user requests human support
-    """
+    """Send notification to Slack when user requests human support"""
+
+    print(f"[SLACK_NOTIFY] Processing notification for: {request.user_email}")
+
     if not SLACK_WEBHOOK_URL:
-        raise HTTPException(status_code=500, detail="Slack webhook not configured")
+        print("[ERROR] Slack webhook not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Slack webhook not configured"
+        )
 
     try:
         # Format conversation history
@@ -324,6 +332,13 @@ async def notify_slack(request: SlackNotificationRequest):
             role = "👤 Visitor" if msg.role == "user" else "🤖 AI"
             content = msg.content[:150] + "..." if len(msg.content) > 150 else msg.content
             history_text += f"{role}: {content}\n\n"
+
+        # Safe timestamp handling
+        try:
+            formatted_time = datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            print(f"[WARN] Timestamp parsing error: {e}")
+            formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Create Slack message
         slack_message = {
@@ -349,7 +364,7 @@ async def notify_slack(request: SlackNotificationRequest):
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Time:*\n{datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')}"
+                            "text": f"*Time:*\n{formatted_time}"
                         },
                         {
                             "type": "mrkdwn",
@@ -405,11 +420,18 @@ async def notify_slack(request: SlackNotificationRequest):
         response = requests.post(
             SLACK_WEBHOOK_URL,
             json=slack_message,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
+            timeout=10
         )
 
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Failed to send Slack notification")
+            print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to send Slack notification: {response.status_code}"
+            )
+
+        print(f"[SLACK_NOTIFY] Notification sent successfully")
 
         return {
             "success": True,
@@ -417,20 +439,52 @@ async def notify_slack(request: SlackNotificationRequest):
             "conversation_id": request.conversation_id
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error sending Slack notification: {str(e)}")
+        print(f"[ERROR] Slack notification error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error sending Slack notification: {str(e)}"
+        )
 
 
 @app.post("/api/submit-brief")
 async def submit_brief(request: BriefSubmission):
-    """
-    Submit project brief and send to Slack
-    """
+    """Submit project brief and send to Slack"""
+
+    print(f"[BRIEF_SUBMIT] Processing brief submission")
+    print(f"[BRIEF_SUBMIT] Conversation ID: {request.conversation_id}")
+    print(f"[BRIEF_SUBMIT] Brief data keys: {list(request.brief_data.keys())}")
+
     if not SLACK_WEBHOOK_URL:
-        raise HTTPException(status_code=500, detail="Slack webhook not configured")
+        print("[ERROR] Slack webhook not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Slack webhook not configured"
+        )
 
     try:
         brief = request.brief_data
+
+        # Safe value extraction with defaults
+        full_name = brief.get('fullName', 'N/A') or 'N/A'
+        work_email = brief.get('workEmail', 'N/A') or 'N/A'
+        company = brief.get('company', 'N/A') or 'N/A'
+        phone = brief.get('phone', 'N/A') or 'N/A'
+        project_type = brief.get('projectType', 'N/A') or 'N/A'
+        timeline = brief.get('timeline', 'N/A') or 'N/A'
+        goal = brief.get('goal', 'N/A') or 'N/A'
+
+        print(f"[BRIEF_SUBMIT] Name: {full_name}, Email: {work_email}, Company: {company}")
+
+        # Safe timestamp handling
+        try:
+            formatted_time = datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            print(f"[WARN] Timestamp parsing error: {e}")
+            formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # Create Slack message with brief details
         slack_message = {
@@ -448,27 +502,27 @@ async def submit_brief(request: BriefSubmission):
                     "fields": [
                         {
                             "type": "mrkdwn",
-                            "text": f"*Name:*\n{brief.get('fullName', 'N/A')}"
+                            "text": f"*Name:*\n{full_name}"
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Email:*\n{brief.get('workEmail', 'N/A')}"
+                            "text": f"*Email:*\n{work_email}"
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Company:*\n{brief.get('company', 'N/A')}"
+                            "text": f"*Company:*\n{company}"
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Phone:*\n{brief.get('phone', 'N/A')}"
+                            "text": f"*Phone:*\n{phone}"
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Project Type:*\n{brief.get('projectType', 'N/A')}"
+                            "text": f"*Project Type:*\n{project_type}"
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Timeline:*\n{brief.get('timeline', 'N/A')}"
+                            "text": f"*Timeline:*\n{timeline}"
                         }
                     ]
                 },
@@ -479,7 +533,7 @@ async def submit_brief(request: BriefSubmission):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*What they want to achieve:*\n{brief.get('goal', 'N/A')}"
+                        "text": f"*What they want to achieve:*\n{goal}"
                     }
                 },
                 {
@@ -487,7 +541,7 @@ async def submit_brief(request: BriefSubmission):
                     "fields": [
                         {
                             "type": "mrkdwn",
-                            "text": f"*Submitted:*\n{datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')}"
+                            "text": f"*Submitted:*\n{formatted_time}"
                         },
                         {
                             "type": "mrkdwn",
@@ -501,43 +555,61 @@ async def submit_brief(request: BriefSubmission):
                         "type": "mrkdwn",
                         "text": f"*Conversation ID:* `{request.conversation_id}`"
                     }
-                },
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📧 Reply via Email",
-                                "emoji": True
-                            },
-                            "url": f"mailto:{brief.get('workEmail', '')}?subject=Re: Your Firswood Project Brief&body=Hi {brief.get('fullName', '')},%0D%0A%0D%0AThanks for submitting your project brief.%0D%0A%0D%0A",
-                            "style": "primary"
-                        },
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "text": "📞 Call",
-                                "emoji": True
-                            },
-                            "url": f"tel:{brief.get('phone', '')}"
-                        }
-                    ]
                 }
             ]
         }
+
+        # Only add action buttons if email/phone are valid
+        if work_email != 'N/A' or phone != 'N/A':
+            action_elements = []
+
+            if work_email != 'N/A':
+                action_elements.append({
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📧 Reply via Email",
+                        "emoji": True
+                    },
+                    "url": f"mailto:{work_email}?subject=Re: Your Firswood Project Brief&body=Hi {full_name},%0D%0A%0D%0AThanks for submitting your project brief.%0D%0A%0D%0A",
+                    "style": "primary"
+                })
+
+            if phone != 'N/A':
+                action_elements.append({
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📞 Call",
+                        "emoji": True
+                    },
+                    "url": f"tel:{phone}"
+                })
+
+            if action_elements:
+                slack_message["blocks"].append({
+                    "type": "actions",
+                    "elements": action_elements
+                })
+
+        print(f"[BRIEF_SUBMIT] Sending to Slack...")
 
         # Send to Slack
         response = requests.post(
             SLACK_WEBHOOK_URL,
             json=slack_message,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
+            timeout=10
         )
 
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Failed to send brief to Slack")
+            print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to send brief to Slack: {response.status_code}"
+            )
+
+        print(f"[BRIEF_SUBMIT] Brief submitted successfully to Slack")
 
         return {
             "success": True,
@@ -545,8 +617,15 @@ async def submit_brief(request: BriefSubmission):
             "conversation_id": request.conversation_id
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting brief: {str(e)}")
+        print(f"[ERROR] Brief submission error: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error submitting brief: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
