@@ -1,4 +1,4 @@
-# main.py - FastAPI Backend with AI-Powered Data Extraction
+# main.py - FINAL FIXED VERSION v3.1
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,10 +11,8 @@ from datetime import datetime
 import requests
 import traceback
 
-# Initialize FastAPI
-app = FastAPI(title="Firswood Intelligence Chat API - AI Extraction")
+app = FastAPI(title="Firswood Intelligence Chat API - AI Extraction v3.1")
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,72 +21,112 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Environment variables
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
 
-# Company knowledge base
 COMPANY_KNOWLEDGE = """
 # Firswood Intelligence - Company Knowledge Base
-
-## Company Overview
-Firswood Intelligence specializes in production-ready AI systems that deliver measurable business value.
-
-**Company Details:**
-- Company: Firswood Digital Services Limited
-- Location: Manchester, UK
-- Website: www.firswoodintelligence.com
-
-## What We Build
-1. Autonomous AI Agents
-2. RAG & Enterprise Search
-3. Conversational AI
-4. Forecasting & Decision Intelligence
-5. Real-Time Dashboards & Reporting
-6. Computer Vision & On-Device AI
-7. Full-Stack AI Product Development
-
-## Engagement Models
-1. Fixed-Scope Builds
-2. Development Partnerships
-3. High-Impact MVPs
+Specializes in production-ready AI systems that deliver measurable business value.
+Location: Manchester, UK | Website: www.firswoodintelligence.com
 """
 
 CORE_OPERATING_GUIDELINES = """
 # Firswood Intelligence AI Chatbot Operating Guidelines
 
-## Identity & Role
-You are a conversational AI assistant for Firswood Intelligence. Your goal is to understand the user's project through natural conversation.
+## Your Role
+You are a conversational AI assistant for Firswood Intelligence. Have natural conversations to understand user projects.
 
-## Conversation Style:
-1. **KEEP RESPONSES ULTRA SHORT**: Maximum 2 sentences, under 40 words
-2. **ONE QUESTION MAXIMUM** per response
-3. **NEVER REPEAT USER INPUT**: When user says "Hamid", respond "Nice to meet you, Hamid!" NOT "Hamidhamid"
-4. **BE NATURAL**: Have a genuine conversation, not an interrogation
-5. **NO VERBOSE EXPLANATIONS**: Get to the point fast
+## CRITICAL RULES TO PREVENT REPETITION:
+1. **NEVER say "Nice to meet you" more than ONCE per conversation**
+2. **NEVER repeat greetings** - after first greeting, move on to questions
+3. **KEEP RESPONSES ULTRA SHORT**: 1-2 sentences max, under 30 words
+4. **ONE QUESTION per response**
+5. **NO ECHOING**: Don't repeat what user just said
+6. **MOVE FORWARD**: After getting info, ask about NEXT thing, don't confirm again
 
-## Information to Gather Naturally:
-- Their name
-- Work email
-- Company name
-- Phone number (optional)
-- Project type and goals
-- Timeline
+## Information to Gather:
+- Name (ask once)
+- Email (ask once)
+- Company (ask once)
+- Project details
+- Timeline (ask once)
 
-## Key Rules:
-- Maximum 40 words per response
-- ONE question per response
-- Never echo user input
-- Keep it conversational and warm
+## Conversation Flow Example:
+User: "I want a chatbot"
+You: "What problem will it solve?"
+
+User: "Customer support"
+You: "What's your name?"
+
+User: "John"
+You: "What's your email?" (NOT "Nice to meet you John!")
+
+User: "john@example.com"
+You: "What company do you work for?" (NOT "Nice to meet you!")
+
+## STRICT RULES:
+- After name: Ask about email or company, NOT greet again
+- After email: Ask about company or project, NOT greet again  
+- After company: Ask about project details, NOT greet again
+- Never use "Nice to meet you" twice
+- Max 30 words per response
+- Stay on topic
+- Be efficient
 """
 
-# NEW: Data extraction prompt
-DATA_EXTRACTION_PROMPT = """You are a data extraction AI. Analyze the conversation and extract key information.
+# IMPROVED: More explicit extraction prompt
+DATA_EXTRACTION_PROMPT = """You are a data extraction AI. Analyze this conversation and extract information into JSON format.
 
-Return a JSON object with these fields (use null if not found):
+EXTRACTION RULES:
+
+1. **fullName**: Look for:
+   - "my name is X"
+   - "I'm X"
+   - "this is X"
+   - User says name after AI asks "what's your name?"
+   - Capitalize properly (e.g., "hamid abbas" → "Hamid Abbas")
+
+2. **workEmail**: Extract any email address (name@domain.com)
+
+3. **company**: Look for:
+   - "company is X"
+   - "work at X"
+   - "company name X"
+   - User says company name after AI asks about company
+   - Single-word responses to "what company?" (e.g., "emeron" → "Emeron")
+   - Capitalize first letter
+
+4. **phone**: Extract any phone number format
+
+5. **projectType**: Categorize based on description:
+   - If about answering questions → "Product Support Chatbot" or "Customer Support Chatbot"
+   - If about tracking orders → "Order Tracking System"
+   - If about documents → "Document Q&A Chatbot"
+   - If about analytics → "Analytics Dashboard"
+   - If general chatbot → "Chatbot"
+   - Default: "AI Solution"
+
+6. **timeline**: Standardize to ONE of these:
+   - "ASAP" (if urgent, immediately, right away)
+   - "1 month" (if 1 month, 30 days, next month)
+   - "1-3 months" (if 2-3 months, couple months, quarter)
+   - "3-6 months" (if 3-6 months, half year)
+   - "6+ months" (if 6+ months, next year)
+   - Look for: "3 months" → "1-3 months", "1 month" → "1 month"
+
+7. **goal**: Summarize main problem/goal in 1-2 clear sentences from user's messages
+
+IMPORTANT CONTEXT RULES:
+- If AI asks "what's your name?" and user says "hamid abbas", extract as fullName
+- If AI asks "what company?" and user says "emeron", extract as company
+- If user says "3 months", timeline is "1-3 months"
+- If user says "1 month", timeline is "1 month"
+- Ignore filler words: "yes", "no", "okay", "sure"
+
+Return ONLY valid JSON (no markdown, no explanation):
 {
   "fullName": "string or null",
-  "workEmail": "string or null",
+  "workEmail": "string or null", 
   "company": "string or null",
   "phone": "string or null",
   "projectType": "string or null",
@@ -96,27 +134,10 @@ Return a JSON object with these fields (use null if not found):
   "goal": "string or null"
 }
 
-EXTRACTION RULES:
-1. **fullName**: Extract from phrases like "my name is X", "I'm X", "this is X", or standalone name responses. Capitalize properly.
-2. **workEmail**: Extract any valid email address (name@domain.com)
-3. **company**: Extract company name from "at X", "work at X", "company is X", or standalone company responses
-4. **phone**: Extract phone numbers in any format
-5. **projectType**: Categorize into: "Customer Support Chatbot", "Product Support Chatbot", "Order Tracking", "Document Q&A", "Analytics Dashboard", "Automation", "AI Platform", "MVP Development", or "Other"
-6. **timeline**: Standardize to: "ASAP", "1 month", "1-3 months", "3-6 months", "6+ months", or null
-7. **goal**: Extract the main problem/goal in 1-2 sentences (not questions, meaningful statements only)
-
-IMPORTANT:
-- Be smart about context: if AI asks "what's your name?" and user says "john", extract "John" as fullName
-- Handle typos: "1 moth" = "1 month"
-- Single word responses after questions are likely the answer to that question
-- Ignore filler words like "yes", "no", "okay", "sure"
-- Return ONLY valid JSON, no markdown, no explanation
-
 Conversation to analyze:
 """
 
 
-# Pydantic models
 class Message(BaseModel):
     role: str
     content: str
@@ -137,11 +158,6 @@ class ChatResponse(BaseModel):
     extracted_data: Optional[Dict[str, Any]] = None
 
 
-class ExtractionRequest(BaseModel):
-    conversation_history: List[Message]
-    conversation_id: str
-
-
 class BriefSubmission(BaseModel):
     brief_data: dict
     conversation_id: str
@@ -149,52 +165,52 @@ class BriefSubmission(BaseModel):
     url: Optional[str] = None
 
 
-# Initialize Gemini client
 def get_gemini_client():
     api_key = GOOGLE_API_KEY
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY not found in environment variables")
+        raise ValueError("GOOGLE_API_KEY not found")
     return genai.Client(api_key=api_key)
 
 
 def get_system_instruction(additional_context=""):
-    base_instruction = f"""You are the AI assistant for Firswood Intelligence.
+    base = f"""You are the AI assistant for Firswood Intelligence.
 
 {CORE_OPERATING_GUIDELINES}
 
-Company Knowledge Base:
 {COMPANY_KNOWLEDGE}
 
-Remember:
-- Keep responses VERY SHORT (2-3 sentences max, under 60 words)
-- Be conversational and warm
-- ONE question per message maximum
-- NEVER repeat or echo back user input
-- Build trust through natural conversation
+CRITICAL REMINDERS:
+- NEVER repeat "Nice to meet you" - say it ONCE maximum
+- After getting name, move to next question immediately
+- After getting email, move to next question immediately
+- Keep responses under 30 words
+- Ask ONE question per response
+- Be efficient and move forward
 
 Current date: {datetime.now().strftime('%B %d, %Y')}
 """
     if additional_context:
-        base_instruction += f"\n\nAdditional Context: {additional_context}"
-    return base_instruction
+        base += f"\n\nContext: {additional_context}"
+    return base
 
 
-# NEW: AI-powered data extraction function
 async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str, Any]:
     """Use AI to extract structured data from conversation"""
     try:
-        print("[EXTRACT] Starting AI-powered extraction...")
+        print("[EXTRACT] Starting AI extraction...")
 
-        # Format conversation for extraction
+        # Format conversation
         conversation_text = ""
-        for msg in conversation_history:
-            role = "User" if msg.role == "user" else "AI Assistant"
-            conversation_text += f"{role}: {msg.content}\n"
+        for i, msg in enumerate(conversation_history):
+            role = "User" if msg.role == "user" else "AI"
+            conversation_text += f"[Message {i + 1}] {role}: {msg.content}\n"
+
+        print(f"[EXTRACT] Analyzing {len(conversation_history)} messages")
 
         # Create extraction prompt
         full_prompt = DATA_EXTRACTION_PROMPT + "\n" + conversation_text
 
-        # Call Gemini for extraction
+        # Call Gemini
         client = get_gemini_client()
         response = client.models.generate_content(
             model='gemini-2.5-flash',
@@ -203,15 +219,15 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
                 parts=[types.Part(text=full_prompt)]
             )],
             config=types.GenerateContentConfig(
-                temperature=0.1,  # Low temperature for consistent extraction
-                response_mime_type="application/json"  # Force JSON output
+                temperature=0.1,
+                response_mime_type="application/json"
             )
         )
 
-        # Parse JSON response
+        # Parse response
         extracted_text = response.text.strip()
 
-        # Remove markdown code blocks if present
+        # Clean markdown
         if extracted_text.startswith("```json"):
             extracted_text = extracted_text[7:]
         if extracted_text.startswith("```"):
@@ -221,13 +237,12 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
         extracted_data = json.loads(extracted_text.strip())
 
-        print(f"[EXTRACT] Successfully extracted: {json.dumps(extracted_data, indent=2)}")
+        print(f"[EXTRACT] ✅ Extracted: {json.dumps(extracted_data, indent=2)}")
         return extracted_data
 
     except Exception as e:
         print(f"[ERROR] Extraction failed: {str(e)}")
         traceback.print_exc()
-        # Return empty data on failure
         return {
             "fullName": None,
             "workEmail": None,
@@ -242,13 +257,12 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 @app.get("/")
 async def root():
     return {
-        "service": "Firswood Intelligence Chat API - AI Extraction",
+        "service": "Firswood Intelligence Chat API",
         "status": "running",
-        "version": "3.0.0",
-        "features": ["AI-powered data extraction", "Natural conversation", "Smart lead capture"],
+        "version": "3.1.0",
+        "features": ["AI extraction", "No regex", "Anti-repetition"],
         "endpoints": {
             "chat": "/api/chat",
-            "extract": "/api/extract-data",
             "submit_brief": "/api/submit-brief",
             "health": "/health"
         }
@@ -261,19 +275,19 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "google_api_configured": bool(GOOGLE_API_KEY),
-        "slack_webhook_configured": bool(SLACK_WEBHOOK_URL)
+        "slack_configured": bool(SLACK_WEBHOOK_URL)
     }
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Process chat message and return AI response with extracted data"""
+    """Process chat with AI extraction"""
     try:
-        print(f"[CHAT] Processing message from conversation: {request.conversation_id}")
+        print(f"[CHAT] Message #{len(request.conversation_history) + 1}")
 
         client = get_gemini_client()
 
-        # Only send USER messages to avoid echoing
+        # Build contents - ONLY user messages
         contents = []
         for msg in request.conversation_history:
             if msg.role == "user":
@@ -288,6 +302,8 @@ async def chat(request: ChatRequest):
             parts=[types.Part(text=request.message)]
         ))
 
+        print(f"[CHAT] Sending {len(contents)} user messages to AI")
+
         # Generate response
         response = client.models.generate_content(
             model='gemini-2.0-flash-exp',
@@ -300,13 +316,13 @@ async def chat(request: ChatRequest):
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
-        # NEW: Extract data using AI after every message
+        # Extract data using AI
         all_messages = request.conversation_history + [
             Message(role="user", content=request.message, timestamp=datetime.now().isoformat())
         ]
         extracted_data = await extract_data_with_ai(all_messages)
 
-        print(f"[CHAT] Response generated with extracted data")
+        print(f"[CHAT] ✅ Response generated with extraction")
 
         return ChatResponse(
             response=response.text,
@@ -318,40 +334,13 @@ async def chat(request: ChatRequest):
     except Exception as e:
         print(f"[ERROR] Chat error: {str(e)}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generating response: {str(e)}"
-        )
-
-
-@app.post("/api/extract-data")
-async def extract_data(request: ExtractionRequest):
-    """Extract structured data from conversation using AI"""
-    try:
-        print(f"[EXTRACT_API] Processing extraction for: {request.conversation_id}")
-
-        extracted_data = await extract_data_with_ai(request.conversation_history)
-
-        return {
-            "success": True,
-            "conversation_id": request.conversation_id,
-            "extracted_data": extracted_data,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        print(f"[ERROR] Extract API error: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error extracting data: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @app.post("/api/submit-brief")
 async def submit_brief(request: BriefSubmission):
-    """Submit project brief to Slack"""
-    print(f"[BRIEF_SUBMIT] Processing brief submission")
+    """Submit to Slack"""
+    print(f"[BRIEF] Submitting...")
 
     if not SLACK_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="Slack webhook not configured")
@@ -359,18 +348,15 @@ async def submit_brief(request: BriefSubmission):
     try:
         brief = request.brief_data
 
-        # Clean function
-        def clean(text, max_length=500):
-            if not text or text == 'N/A' or text == 'null':
+        def clean(text, max_len=500):
+            if not text or str(text).lower() in ['n/a', 'null', 'none']:
                 return 'N/A'
             text = str(text).strip()
             text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            text = ''.join(char for char in text if ord(char) >= 32 or char == '\n')
-            if len(text) > max_length:
-                text = text[:max_length] + '...'
+            if len(text) > max_len:
+                text = text[:max_len] + '...'
             return text
 
-        # Extract and clean data
         full_name = clean(brief.get('fullName', 'N/A'), 100)
         work_email = clean(brief.get('workEmail', 'N/A'), 100)
         company = clean(brief.get('company', 'N/A'), 100)
@@ -379,13 +365,11 @@ async def submit_brief(request: BriefSubmission):
         timeline = clean(brief.get('timeline', 'N/A'), 50)
         goal = clean(brief.get('goal', 'N/A'), 400)
 
-        # Timestamp
         try:
             formatted_time = datetime.fromisoformat(request.timestamp).strftime('%Y-%m-%d %H:%M:%S')
         except:
             formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Create Slack message
         slack_message = {
             "text": (
                 f"🎉 *NEW LEAD - AI EXTRACTED!*\n\n"
@@ -397,12 +381,11 @@ async def submit_brief(request: BriefSubmission):
                 f"📅 *Timeline:* {timeline}\n\n"
                 f"🎯 *Goal:*\n{goal}\n\n"
                 f"⏰ *Time:* {formatted_time}\n"
-                f"🆔 *Conversation ID:* {request.conversation_id}\n"
+                f"🆔 *ID:* {request.conversation_id}\n"
                 f"🔗 *Page:* {request.url or 'N/A'}"
             )
         }
 
-        # Send to Slack
         response = requests.post(
             SLACK_WEBHOOK_URL,
             json=slack_message,
@@ -411,29 +394,23 @@ async def submit_brief(request: BriefSubmission):
         )
 
         if response.status_code != 200:
-            print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to send to Slack: {response.status_code}"
-            )
+            print(f"[ERROR] Slack error: {response.status_code}")
+            raise HTTPException(status_code=500, detail=f"Slack error: {response.status_code}")
 
-        print(f"[BRIEF_SUBMIT] Brief submitted successfully to Slack")
+        print(f"[BRIEF] ✅ Submitted to Slack")
 
         return {
             "success": True,
-            "message": "Brief submitted successfully",
+            "message": "Brief submitted",
             "conversation_id": request.conversation_id
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Brief submission error: {str(e)}")
+        print(f"[ERROR] Submit error: {str(e)}")
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error submitting brief: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 if __name__ == "__main__":
