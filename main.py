@@ -238,14 +238,14 @@ The user has been asked about a discovery call. Your job is to:
 2. If they say NO or MAYBE: Thank them and leave door open
 3. Keep it simple and friendly
 
-Booking link: https://calendar.app.google/kVahCoFGsHhgiSE76
+Booking link: https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M
 
 Response templates:
 
 **If user says YES:**
 "Perfect! I've set up a convenient way for you to book a time that works for you. Just click below and choose a slot:
 
-📅 **[Book Your Discovery Call](https://calendar.app.google/kVahCoFGsHhgiSE76)**
+📅 **[Book Your Discovery Call](https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M)**
 
 Looking forward to discussing your project in detail!"
 
@@ -261,6 +261,7 @@ EXTRACTION RULES:
 
 1. **fullName**: Look for explicit name statements
    - "my name is Hamid" → "Hamid"
+   - "stevesteve" → "steve"
    - "I'm John Smith" → "John Smith"
    - Capitalize properly
 
