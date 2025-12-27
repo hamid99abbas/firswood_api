@@ -468,19 +468,40 @@ async def submit_brief(request: BriefSubmission):
     try:
         brief = request.brief_data
 
-        # Safe value extraction with defaults
-        full_name = brief.get('fullName', 'N/A') or 'N/A'
-        work_email = brief.get('workEmail', 'N/A') or 'N/A'
-        company = brief.get('company', 'N/A') or 'N/A'
-        phone = brief.get('phone', 'N/A') or 'N/A'
-        project_type = brief.get('projectType', 'N/A') or 'N/A'
-        timeline = brief.get('timeline', 'N/A') or 'N/A'
+        # Helper function to clean text for Slack
+        def clean_for_slack(text, max_length=500):
+            """Clean and truncate text for Slack Block Kit"""
+            if not text or text == 'N/A':
+                return 'N/A'
 
-        # Truncate goal to 500 chars and escape special characters for Slack
-        raw_goal = brief.get('goal', 'N/A') or 'N/A'
-        goal = raw_goal[:500] + ('...' if len(raw_goal) > 500 else '')
+            # Convert to string and strip
+            text = str(text).strip()
+
+            # Escape special characters for Slack
+            text = text.replace('&', '&amp;')
+            text = text.replace('<', '&lt;')
+            text = text.replace('>', '&gt;')
+
+            # Remove any control characters
+            text = ''.join(char for char in text if ord(char) >= 32 or char == '\n')
+
+            # Truncate if needed
+            if len(text) > max_length:
+                text = text[:max_length] + '...'
+
+            return text
+
+        # Safe value extraction with defaults and cleaning
+        full_name = clean_for_slack(brief.get('fullName', 'N/A'), 100)
+        work_email = clean_for_slack(brief.get('workEmail', 'N/A'), 100)
+        company = clean_for_slack(brief.get('company', 'N/A'), 100)
+        phone = clean_for_slack(brief.get('phone', 'N/A'), 50)
+        project_type = clean_for_slack(brief.get('projectType', 'N/A'), 100)
+        timeline = clean_for_slack(brief.get('timeline', 'N/A'), 50)
+        goal = clean_for_slack(brief.get('goal', 'N/A'), 400)
 
         print(f"[BRIEF_SUBMIT] Name: {full_name}, Email: {work_email}, Company: {company}")
+        print(f"[BRIEF_SUBMIT] Goal length: {len(goal)}")
 
         # Safe timestamp handling
         try:
@@ -489,113 +510,15 @@ async def submit_brief(request: BriefSubmission):
             print(f"[WARN] Timestamp parsing error: {e}")
             formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        # Create Slack message with brief details
+        # Create SIMPLE Slack message - just text, no fancy blocks
         slack_message = {
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📋 New Project Brief Submitted",
-                        "emoji": True
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Name:*\n{full_name}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Email:*\n{work_email}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Company:*\n{company}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Phone:*\n{phone}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Project Type:*\n{project_type}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Timeline:*\n{timeline}"
-                        }
-                    ]
-                },
-                {
-                    "type": "divider"
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*What they want to achieve:*\n{goal.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}"
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Submitted:*\n{formatted_time}"
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": f"*Page:*\n{request.url or 'N/A'}"
-                        }
-                    ]
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Conversation ID:* `{request.conversation_id}`"
-                    }
-                }
-            ]
+            "text": f"🎉 NEW LEAD!\n\n*Name:* {full_name}\n*Email:* {work_email}\n*Company:* {company}\n*Phone:* {phone}\n*Project:* {project_type}\n*Timeline:* {timeline}\n\n*Goal:* {goal}\n\nConversation ID: {request.conversation_id}"
         }
 
-        # Only add action buttons if email/phone are valid
-        if work_email != 'N/A' or phone != 'N/A':
-            action_elements = []
-
-            if work_email != 'N/A':
-                action_elements.append({
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📧 Reply via Email",
-                        "emoji": True
-                    },
-                    "url": f"mailto:{work_email}?subject=Re: Your Firswood Project Brief&body=Hi {full_name},%0D%0A%0D%0AThanks for submitting your project brief.%0D%0A%0D%0A",
-                    "style": "primary"
-                })
-
-            if phone != 'N/A':
-                action_elements.append({
-                    "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "📞 Call",
-                        "emoji": True
-                    },
-                    "url": f"tel:{phone}"
-                })
-
-            if action_elements:
-                slack_message["blocks"].append({
-                    "type": "actions",
-                    "elements": action_elements
-                })
-
         print(f"[BRIEF_SUBMIT] Sending to Slack...")
+
+        # Log the payload for debugging
+        print(f"[BRIEF_SUBMIT] Slack payload size: {len(json.dumps(slack_message))} bytes")
 
         # Send to Slack
         response = requests.post(
@@ -607,9 +530,11 @@ async def submit_brief(request: BriefSubmission):
 
         if response.status_code != 200:
             print(f"[ERROR] Slack API returned {response.status_code}: {response.text}")
+            # Log the full payload that failed
+            print(f"[ERROR] Failed payload: {json.dumps(slack_message, indent=2)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to send brief to Slack: {response.status_code}"
+                detail=f"Failed to send brief to Slack: {response.status_code} - {response.text}"
             )
 
         print(f"[BRIEF_SUBMIT] Brief submitted successfully to Slack")
