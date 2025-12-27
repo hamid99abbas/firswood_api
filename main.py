@@ -1,4 +1,4 @@
-# main.py - FIXED v3.2 - No Repetition Loops
+# main.py - v4.0 - Natural Conversation + Discovery Call Flow
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from datetime import datetime
 import requests
 import traceback
 
-app = FastAPI(title="Firswood Intelligence Chat API v3.2")
+app = FastAPI(title="Firswood Intelligence Chat API v4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,114 +26,154 @@ SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBH
 
 COMPANY_KNOWLEDGE = """
 # Firswood Intelligence
-AI systems design and delivery practice.
+AI systems design and delivery practice specializing in production-ready solutions.
 Location: Manchester, UK
 Website: www.firswoodintelligence.com
+Discovery Call: calendar.app.google/kVahCoFGsHhgiSE76
 """
 
 CORE_OPERATING_GUIDELINES = """
-# Firswood Intelligence AI Assistant - Operating Rules
+# Firswood Intelligence AI Assistant - Natural Conversation Guide
 
-## Your Mission
-Have a natural conversation to understand the user's AI project. Gather information smoothly without feeling like an interrogation.
+## Your Personality
+You're a friendly, knowledgeable AI consultant. You're genuinely interested in their project and want to help. 
+You're conversational, not robotic. Think of yourself as a helpful colleague, not a form.
 
-## CRITICAL CONVERSATION RULES:
+## Conversation Style
 
-### 1. NEVER REPEAT YOURSELF
-- If you ask "What problem will the chatbot solve?" and they answer, DON'T ask it again
-- Move to a NEW question after they answer
-- Keep track of what you already know
+### Be Natural and Warm:
+✅ "That sounds really useful! What kind of products do you sell?"
+✅ "Nice to meet you, Hamid! What company are you with?"
+✅ "I love that idea. How soon are you looking to launch?"
+✅ "Makes sense! Where's the product data currently stored?"
 
-### 2. CONVERSATION FLOW (Follow this order)
-Ask about these topics IN ORDER (one at a time):
-1. Project type/goal (what they want to build)
-2. Problem it solves (why they need it)
-3. Their name
-4. Their email
-5. Their company
-6. Timeline
-7. Additional details (budget, team size, etc.)
+❌ "What is your company name?"
+❌ "Please provide timeline."
+❌ "What problem will this solve?"
 
-### 3. HOW TO ASK QUESTIONS
-✅ GOOD:
-- "What problem will it solve?" (first time)
-- "What's your name?" (after project discussion)
-- "What company do you work for?" (after name)
-- "What's your timeline?" (after company)
+### Show Interest:
+- React to what they say with brief acknowledgments
+- Use phrases like: "That makes sense", "I see", "Great!", "Interesting", "Love it"
+- Ask follow-up questions that show you're listening
+- Build on their previous answers
 
-❌ BAD:
-- Asking "What problem?" twice
-- Asking "What's your name?" twice
-- Repeating ANY question you already asked
+### Keep It Flowing:
+- One question at a time
+- Short responses (20-40 words)
+- Natural transitions between topics
+- Don't make it feel like an interrogation
 
-### 4. RESPONSE STYLE
-- Keep responses SHORT: 1-2 sentences, max 30 words
-- Ask ONE question per response
-- Don't repeat information back to them
-- Sound natural and conversational
-- Move forward, never backward
+## Information Gathering Flow
 
-### 5. RECOGNITION RULES
-If user says:
-- "I want a chatbot" → You know: project type is chatbot
-- "For customer support" → You know: it's for support
-- "My name is John" → You know: name is John
-- "john@email.com" → You know: email is john@email.com
+**Phase 1: Understanding the Project (2-3 messages)**
+- What they want to build
+- Why they need it / what problem it solves
+- Key details about their use case
 
-After you know something, NEVER ask about it again.
+**Phase 2: Getting to Know Them (2-3 messages)**
+- Their name (casual: "By the way, what's your name?")
+- Their company (natural: "What company are you with?")
+- Their email (friendly: "What's your work email? I'll loop you in.")
 
-## Examples of Good Conversation:
+**Phase 3: Logistics (1-2 messages)**
+- Timeline ("How soon are you looking to launch?")
+- Budget/team size if relevant
 
-User: "I want a chatbot"
-You: "What problem will it solve?"
+**Phase 4: Next Steps (1 message)**
+- Suggest discovery call
+- Share calendar link
+- End warmly
 
-User: "Customer support"
-You: "What's your name?" ← NEW question, don't repeat
+## Conversation Examples
 
-User: "John"
-You: "What's your email?" ← NEW question
+### Example 1: Product Chatbot
+User: "I need a chatbot for my website"
+You: "Sounds great! What would the chatbot help with?"
 
-User: "john@email.com"
-You: "What company?" ← NEW question
+User: "Answering product questions"
+You: "Nice! What kind of products do you sell?"
 
-## KEY RULE
-Each response must ask something NEW. Never repeat a question.
+User: "Electronics - drills and switches"
+You: "Got it. By the way, what's your name?"
+
+User: "Sarah"
+You: "Nice to meet you, Sarah! What company are you with?"
+
+User: "BuildPro"
+You: "Perfect. What's your work email?"
+
+User: "sarah@buildpro.com"
+You: "Thanks! How soon are you looking to launch this?"
+
+User: "2-3 months"
+You: "Makes sense. I'd love to discuss this in detail. Want to book a quick discovery call? Here's my calendar: [link]"
+
+### Example 2: Customer Support Bot
+User: "I want an AI for customer support"
+You: "That's a great use case! What kind of support queries would it handle?"
+
+User: "Order status, returns, FAQs"
+You: "Perfect. Where's your order data currently stored?"
+
+User: "Shopify and our internal system"
+You: "Got it. What's your name, by the way?"
+
+## Key Rules
+
+1. **Be Conversational**: Sound human, not like a chatbot
+2. **Show Interest**: React to what they say
+3. **Ask Naturally**: Work questions into the flow
+4. **Never Repeat**: If you know something, don't ask again
+5. **Build Trust**: Be helpful and knowledgeable
+6. **End with Action**: Always suggest the discovery call
+
+## Response Length
+- 15-40 words per response
+- One main point or question
+- Optional brief reaction/acknowledgment first
+
+## Tone
+Friendly professional. Like talking to a knowledgeable colleague over coffee, not filling out a form.
 """
 
 DATA_EXTRACTION_PROMPT = """Extract information from this conversation into JSON.
 
 RULES:
-1. **fullName**: Extract from "my name is X", "I'm X", or when user gives name after being asked
-   - Capitalize: "hamid abbas" → "Hamid Abbas"
+1. **fullName**: Extract from "my name is X", "I'm X", or name given after being asked
+   - Capitalize: "sarah" → "Sarah", "hamid abbas" → "Hamid Abbas"
 
-2. **workEmail**: Any email address (name@domain.com)
+2. **workEmail**: Any email address
 
-3. **company**: Extract from "company is X", "work at X", or single-word response to company question
-   - Capitalize: "emeron" → "Emeron"
+3. **company**: Extract from "company is X", "work at X", "with X", or single-word response
+   - Capitalize: "buildpro" → "BuildPro"
 
 4. **phone**: Any phone number
 
-5. **projectType**: Categorize based on what they want:
-   - Chatbot for support → "Customer Support Chatbot"
-   - Chatbot for products → "Product Support Chatbot"  
-   - Order tracking → "Order Tracking System"
-   - Document questions → "Document Q&A Chatbot"
-   - Analytics → "Analytics Dashboard"
-   - General chatbot → "Chatbot"
+5. **projectType**: Categorize intelligently:
+   - "Customer Support Chatbot" - for support queries, tickets, help desk
+   - "Product Support Chatbot" - for product questions, comparisons, recommendations
+   - "Order Tracking System" - for order status, tracking, delivery
+   - "Document Q&A Chatbot" - for answering questions from documents
+   - "Analytics Dashboard" - for reporting, metrics, insights
+   - "AI Agent" - for complex multi-step tasks
+   - "Chatbot" - general conversational AI
 
-6. **timeline**: Standardize to one of:
-   - "ASAP", "1 month", "1-3 months", "3-6 months", "6+ months"
-   - "3 months" → "1-3 months"
-   - "1 month" → "1 month"
+6. **timeline**: Standardize to:
+   - "ASAP" (urgent, immediately)
+   - "1 month" (1 month, 4 weeks, 30 days)
+   - "1-3 months" (2-3 months, quarter)
+   - "3-6 months" (3-6 months, half year)
+   - "6+ months" (long term, next year)
 
-7. **goal**: Main problem/goal in 1-2 sentences from user's description
+7. **goal**: Summarize the main problem/goal in 1-2 clear sentences
 
-CONTEXT AWARENESS:
-- If AI asks "what company?" and user says "emeron" → company is "Emeron"
-- If user says "answer customer questions" → goal includes that
+CONTEXT RULES:
+- Single-word responses to questions are likely the answer
+- "3 months" → "1-3 months"
 - Ignore filler: "yes", "no", "okay"
+- Be smart about context
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown):
 {
   "fullName": "string or null",
   "workEmail": "string or null",
@@ -159,6 +199,7 @@ class ChatRequest(BaseModel):
     conversation_history: Optional[List[Message]] = []
     conversation_id: Optional[str] = None
     system_context: Optional[str] = None
+    ready_for_call: Optional[bool] = False
 
 
 class ChatResponse(BaseModel):
@@ -166,6 +207,7 @@ class ChatResponse(BaseModel):
     conversation_id: str
     timestamp: str
     extracted_data: Optional[Dict[str, Any]] = None
+    ready_for_call: bool = False
 
 
 class BriefSubmission(BaseModel):
@@ -182,7 +224,28 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
-def get_system_instruction(additional_context="", conversation_summary=""):
+def get_system_instruction(additional_context="", conversation_summary="", ready_for_call=False):
+    if ready_for_call:
+        return f"""You are the AI assistant for Firswood Intelligence.
+
+The user has provided all the key information. Now it's time to wrap up and suggest a discovery call.
+
+{COMPANY_KNOWLEDGE}
+
+IMPORTANT: 
+- Thank them for sharing details
+- Briefly summarize what you understand (1 sentence)
+- Suggest booking a discovery call to discuss in detail
+- Share the calendar link: calendar.app.google/kVahCoFGsHhgiSE76
+- Keep it warm and friendly
+- Max 50 words
+
+Example:
+"Thanks for all the details, Sarah! So you're looking to build a product support chatbot for BuildPro's electronics. I'd love to discuss the technical approach and timeline in detail. Want to book a quick 20-minute discovery call? Here's my calendar: calendar.app.google/kVahCoFGsHhgiSE76"
+
+Current date: {datetime.now().strftime('%B %d, %Y')}
+"""
+
     base = f"""You are the AI assistant for Firswood Intelligence.
 
 {CORE_OPERATING_GUIDELINES}
@@ -190,11 +253,12 @@ def get_system_instruction(additional_context="", conversation_summary=""):
 {COMPANY_KNOWLEDGE}
 
 CRITICAL REMINDERS:
-- NEVER ask the same question twice
-- Each response must ask something NEW
-- Keep responses under 30 words
-- Move forward through the conversation
-- Don't repeat yourself
+- Be warm and conversational
+- Show genuine interest in their project
+- Never repeat questions you already asked
+- Keep responses 15-40 words
+- One question per response
+- Build natural rapport
 
 {conversation_summary}
 
@@ -242,7 +306,7 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
         extracted_data = json.loads(extracted_text.strip())
 
-        print(f"[EXTRACT] ✅ Success: {json.dumps(extracted_data, indent=2)}")
+        print(f"[EXTRACT] ✅ Extracted data")
         return extracted_data
 
     except Exception as e:
@@ -260,26 +324,45 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
 
 def generate_conversation_summary(extracted_data: Dict[str, Any]) -> str:
-    """Generate summary of what we already know"""
+    """Generate summary of what we know"""
     known_info = []
 
     if extracted_data.get('projectType'):
-        known_info.append(f"Project type: {extracted_data['projectType']}")
+        known_info.append(f"- Project type: {extracted_data['projectType']}")
     if extracted_data.get('goal'):
-        known_info.append(f"Goal: {extracted_data['goal']}")
+        known_info.append(f"- Goal: {extracted_data['goal'][:80]}")
     if extracted_data.get('fullName'):
-        known_info.append(f"Name: {extracted_data['fullName']}")
+        known_info.append(f"- Name: {extracted_data['fullName']}")
     if extracted_data.get('workEmail'):
-        known_info.append(f"Email: {extracted_data['workEmail']}")
+        known_info.append(f"- Email: {extracted_data['workEmail']}")
     if extracted_data.get('company'):
-        known_info.append(f"Company: {extracted_data['company']}")
+        known_info.append(f"- Company: {extracted_data['company']}")
     if extracted_data.get('timeline'):
-        known_info.append(f"Timeline: {extracted_data['timeline']}")
+        known_info.append(f"- Timeline: {extracted_data['timeline']}")
 
     if known_info:
-        return f"\nINFO ALREADY COLLECTED:\n" + "\n".join(
-            known_info) + "\n\nNEVER ask about these again. Ask about something NEW."
+        return f"\n=== INFO ALREADY COLLECTED ===\n" + "\n".join(
+            known_info) + "\n\nNEVER ask about these again. Ask something NEW or move to discovery call.\n"
     return ""
+
+
+def check_ready_for_call(extracted_data: Dict[str, Any], message_count: int) -> bool:
+    """Check if we have enough info to suggest discovery call"""
+    has_email = extracted_data.get('workEmail') and extracted_data['workEmail'] not in [None, 'N/A', 'null']
+    has_name = extracted_data.get('fullName') and extracted_data['fullName'] not in [None, 'N/A', 'null']
+    has_company = extracted_data.get('company') and extracted_data['company'] not in [None, 'N/A', 'null']
+    has_project = extracted_data.get('projectType') and extracted_data['projectType'] not in [None, 'N/A', 'null']
+    has_goal = extracted_data.get('goal') and extracted_data['goal'] not in [None, 'N/A', 'null']
+
+    # Count filled fields
+    filled = sum([has_email, has_name, has_company, has_project, has_goal])
+
+    # Ready if: has email + at least 3 other fields + at least 5 messages
+    ready = has_email and filled >= 4 and message_count >= 5
+
+    print(f"[READY_CHECK] Email: {has_email}, Filled: {filled}/5, Messages: {message_count}, Ready: {ready}")
+
+    return ready
 
 
 @app.get("/")
@@ -287,13 +370,8 @@ async def root():
     return {
         "service": "Firswood Intelligence Chat API",
         "status": "running",
-        "version": "3.2.0",
-        "features": ["AI extraction", "Anti-loop protection"],
-        "endpoints": {
-            "chat": "/api/chat",
-            "submit_brief": "/api/submit-brief",
-            "health": "/health"
-        }
+        "version": "4.0.0",
+        "features": ["Natural conversation", "AI extraction", "Discovery call flow"],
     }
 
 
@@ -302,29 +380,29 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "google_api_configured": bool(GOOGLE_API_KEY),
-        "slack_configured": bool(SLACK_WEBHOOK_URL)
     }
 
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Process chat with AI extraction and loop prevention"""
+    """Natural conversation with discovery call flow"""
     try:
-        print(f"\n[CHAT] Message #{len(request.conversation_history) + 1}")
-        print(f"[CHAT] User says: {request.message[:50]}...")
+        message_num = len(request.conversation_history) + 1
+        print(f"\n[CHAT] Message #{message_num}: {request.message[:50]}...")
 
         client = get_gemini_client()
 
-        # First, extract current data to know what we have
+        # Extract current data
         temp_history = request.conversation_history + [
             Message(role="user", content=request.message, timestamp=datetime.now().isoformat())
         ]
         extracted_data = await extract_data_with_ai(temp_history)
 
-        # Generate summary of known info
+        # Check if ready for discovery call
+        ready_for_call = check_ready_for_call(extracted_data, message_num)
+
+        # Generate conversation summary
         conv_summary = generate_conversation_summary(extracted_data)
-        print(f"[CHAT] Known info: {conv_summary[:100]}...")
 
         # Build contents - ONLY user messages
         contents = []
@@ -335,33 +413,35 @@ async def chat(request: ChatRequest):
                     parts=[types.Part(text=msg.content)]
                 ))
 
-        # Add current message
         contents.append(types.Content(
             role="user",
             parts=[types.Part(text=request.message)]
         ))
 
-        print(f"[CHAT] Sending {len(contents)} user messages")
-
-        # Generate response with conversation summary
+        # Generate response
         response = client.models.generate_content(
             model='gemini-2.0-flash-exp',
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=get_system_instruction(request.system_context or "", conv_summary),
-                temperature=0.7,
+                system_instruction=get_system_instruction(
+                    request.system_context or "",
+                    conv_summary,
+                    ready_for_call
+                ),
+                temperature=0.8,  # Higher for more natural conversation
             )
         )
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
-        print(f"[CHAT] ✅ Response: {response.text[:50]}...")
+        print(f"[CHAT] ✅ Response generated (ready_for_call: {ready_for_call})")
 
         return ChatResponse(
             response=response.text,
             conversation_id=conversation_id,
             timestamp=datetime.now().isoformat(),
-            extracted_data=extracted_data
+            extracted_data=extracted_data,
+            ready_for_call=ready_for_call
         )
 
     except Exception as e:
@@ -405,7 +485,7 @@ async def submit_brief(request: BriefSubmission):
 
         slack_message = {
             "text": (
-                f"🎉 *NEW LEAD - AI EXTRACTED!*\n\n"
+                f"🎉 *NEW LEAD - READY FOR DISCOVERY CALL!*\n\n"
                 f"👤 *Name:* {full_name}\n"
                 f"📧 *Email:* {work_email}\n"
                 f"🏢 *Company:* {company}\n"
@@ -413,9 +493,10 @@ async def submit_brief(request: BriefSubmission):
                 f"💼 *Project:* {project_type}\n"
                 f"📅 *Timeline:* {timeline}\n\n"
                 f"🎯 *Goal:*\n{goal}\n\n"
-                f"⏰ *Time:* {formatted_time}\n"
+                f"⏰ *Submitted:* {formatted_time}\n"
                 f"🆔 *ID:* {request.conversation_id}\n"
-                f"🔗 *Page:* {request.url or 'N/A'}"
+                f"🔗 *Page:* {request.url or 'N/A'}\n\n"
+                f"📅 *Next Step:* User invited to book discovery call"
             )
         }
 
@@ -427,21 +508,20 @@ async def submit_brief(request: BriefSubmission):
         )
 
         if response.status_code != 200:
-            print(f"[ERROR] Slack: {response.status_code}")
-            raise HTTPException(status_code=500, detail=f"Slack error: {response.status_code}")
+            raise HTTPException(status_code=500, detail=f"Slack error")
 
-        print(f"[BRIEF] ✅ Submitted successfully")
+        print(f"[BRIEF] ✅ Submitted to Slack")
 
         return {
             "success": True,
-            "message": "Brief submitted",
+            "message": "Brief submitted - ready for discovery call",
             "conversation_id": request.conversation_id
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Submit error: {str(e)}")
+        print(f"[ERROR] {str(e)}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
