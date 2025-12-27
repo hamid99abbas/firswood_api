@@ -219,7 +219,7 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.0-flash',
             contents=[types.Content(
                 role="user",
                 parts=[types.Part(text=full_prompt)]
