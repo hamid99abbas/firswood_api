@@ -475,7 +475,10 @@ async def submit_brief(request: BriefSubmission):
         phone = brief.get('phone', 'N/A') or 'N/A'
         project_type = brief.get('projectType', 'N/A') or 'N/A'
         timeline = brief.get('timeline', 'N/A') or 'N/A'
-        goal = brief.get('goal', 'N/A') or 'N/A'
+
+        # Truncate goal to 500 chars and escape special characters for Slack
+        raw_goal = brief.get('goal', 'N/A') or 'N/A'
+        goal = raw_goal[:500] + ('...' if len(raw_goal) > 500 else '')
 
         print(f"[BRIEF_SUBMIT] Name: {full_name}, Email: {work_email}, Company: {company}")
 
@@ -533,7 +536,7 @@ async def submit_brief(request: BriefSubmission):
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"*What they want to achieve:*\n{goal}"
+                        "text": f"*What they want to achieve:*\n{goal.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}"
                     }
                 },
                 {
