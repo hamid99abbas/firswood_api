@@ -233,15 +233,26 @@ PHASE_3_SYSTEM = """You are the AI assistant for Firswood Intelligence.
 
 ## YOUR ROLE - PHASE 3: BOOK CALL
 
-The user is interested in a discovery call. Your job is to:
-1. Confirm they want to book a call
-2. Share booking link: calendar.app.google/kVahCoFGsHhgiSE76
+The user has been asked about a discovery call. Your job is to:
+1. If they say YES: Share the booking link
+2. If they say NO or MAYBE: Thank them and leave door open
 3. Keep it simple and friendly
 
-Response template:
-"Great! You can book a time that works for you here: calendar.app.google/kVahCoFGsHhgiSE76
+Booking link: https://calendar.app.google/kVahCoFGsHhgiSE76
 
-We'll discuss your project in detail and outline next steps."
+Response templates:
+
+**If user says YES:**
+"Perfect! I've set up a convenient way for you to book a time that works for you. Just click below and choose a slot:
+
+📅 **[Book Your Discovery Call](https://calendar.app.google/kVahCoFGsHhgiSE76)**
+
+Looking forward to discussing your project in detail!"
+
+**If user says NO or NOT NOW:**
+"No problem at all! If you change your mind or have more questions, I'm here anytime. Feel free to reach out whenever you're ready."
+
+Keep responses warm and professional.
 """
 
 DATA_EXTRACTION_PROMPT = """Extract information from this conversation into JSON.
@@ -408,21 +419,32 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
         }
 
 
-def should_submit_brief(extracted_data: Dict[str, Any], current_phase: str, new_phase: str) -> bool:
-    """Check if we should submit brief - only when moving to phase 3"""
-    # Only submit when transitioning FROM phase 2 TO phase 3 (discovery call)
-    if not (current_phase == "phase2" and new_phase == "phase3"):
-        return False
+def should_submit_brief(extracted_data: Dict[str, Any], old_phase: str, new_phase: str, user_message: str) -> bool:
+    """Check if we should submit brief - when user responds to discovery call question"""
+    # Submit when:
+    # 1. Moving from phase 2 to phase 3 (user said YES)
+    # 2. User said NO to discovery call (we're still in phase 2 but they declined)
 
     has_email = bool(extracted_data.get('workEmail'))
     has_project = bool(extracted_data.get('projectType') or extracted_data.get('goal'))
 
-    # At minimum need email and project type
-    result = has_email and has_project
+    # Check if transitioning to phase 3 (YES to call)
+    if old_phase == "phase2" and new_phase == "phase3":
+        result = has_email and has_project
+        print(f"[BRIEF_CHECK] Phase 2→3 (YES): Email: {has_email}, Project: {has_project} → Submit: {result}")
+        return result
 
-    print(
-        f"[BRIEF_CHECK] Phase transition {current_phase}→{new_phase}: Email: {has_email}, Project: {has_project} → Submit: {result}")
-    return result
+    # Check if user declined call (stayed in phase 2 but said no)
+    if old_phase == "phase2" and new_phase == "phase2":
+        decline_keywords = ['no', 'not now', 'maybe later', 'not ready', 'not yet', 'later']
+        msg_lower = user_message.lower().strip()
+        if any(keyword in msg_lower for keyword in decline_keywords):
+            result = has_email and has_project
+            print(
+                f"[BRIEF_CHECK] User declined call (NO): Email: {has_email}, Project: {has_project} → Submit: {result}")
+            return result
+
+    return False
 
 
 @app.get("/")
@@ -516,8 +538,8 @@ async def chat(request: ChatRequest):
             ]
             extracted_data = await extract_data_with_ai(temp_history)
 
-            # Check if should submit (only on phase 2→3 transition)
-            should_submit = should_submit_brief(extracted_data, old_phase, new_phase)
+            # Check if should submit (on phase 2→3 transition OR if user declined call)
+            should_submit = should_submit_brief(extracted_data, old_phase, new_phase, request.message)
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
