@@ -405,27 +405,20 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
         }
 
 
-def should_submit_brief(extracted_data: Dict[str, Any], message_count: int, current_phase: str) -> bool:
-    """Check if we have enough info to submit"""
-    # Only submit in phase 2 and after asking about discovery call
-    if current_phase != "phase2":
+def should_submit_brief(extracted_data: Dict[str, Any], current_phase: str, new_phase: str) -> bool:
+    """Check if we should submit brief - only when moving to phase 3"""
+    # Only submit when transitioning FROM phase 2 TO phase 3 (discovery call)
+    if not (current_phase == "phase2" and new_phase == "phase3"):
         return False
 
     has_email = bool(extracted_data.get('workEmail'))
     has_project = bool(extracted_data.get('projectType') or extracted_data.get('goal'))
-    has_company = bool(extracted_data.get('company'))
-    has_timeline = bool(extracted_data.get('timeline'))
-    has_name = bool(extracted_data.get('fullName'))
 
-    # Need at least: email, project, name, company OR timeline
-    # And must have asked enough questions (at least 6 messages)
-    has_minimum = has_email and has_project and has_name and (has_company or has_timeline)
-    has_enough_msgs = message_count >= 6
-
-    result = has_minimum and has_enough_msgs
+    # At minimum need email and project type
+    result = has_email and has_project
 
     print(
-        f"[BRIEF_CHECK] Email: {has_email}, Project: {has_project}, Name: {has_name}, Company: {has_company}, Timeline: {has_timeline}, Msgs: {message_count}/6 → Submit: {result}")
+        f"[BRIEF_CHECK] Phase transition {current_phase}→{new_phase}: Email: {has_email}, Project: {has_project} → Submit: {result}")
     return result
 
 
@@ -463,15 +456,16 @@ async def chat(request: ChatRequest):
         print(f"\n[CHAT] Phase: {current_phase}, Message #{message_count}")
         print(f"[CHAT] User: {request.message[:60]}...")
 
-        # Detect phase transition
+        # Detect phase transition BEFORE generating response
+        old_phase = current_phase
         new_phase = detect_phase_transition(
             request.message,
             request.conversation_history,
             current_phase
         )
 
-        if new_phase != current_phase:
-            print(f"[PHASE] Switching from {current_phase} to {new_phase}")
+        if new_phase != old_phase:
+            print(f"[PHASE] Switching from {old_phase} to {new_phase}")
             current_phase = new_phase
 
         # Select system prompt based on phase
@@ -507,17 +501,20 @@ async def chat(request: ChatRequest):
             )
         )
 
-        # Extract data if in phase 2
+        # Extract data and check if should submit
         extracted_data = None
         should_submit = False
 
-        if current_phase == "phase2":
+        if current_phase == "phase2" or new_phase == "phase3":
+            # Extract data when in phase 2 or moving to phase 3
             temp_history = request.conversation_history + [
                 Message(role="user", content=request.message),
                 Message(role="assistant", content=response.text)
             ]
             extracted_data = await extract_data_with_ai(temp_history)
-            should_submit = should_submit_brief(extracted_data, message_count, current_phase)
+
+            # Check if should submit (only on phase 2→3 transition)
+            should_submit = should_submit_brief(extracted_data, old_phase, new_phase)
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
 
