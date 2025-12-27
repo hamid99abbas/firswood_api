@@ -272,7 +272,8 @@ EXTRACTION RULES:
    - "company is Emebron" → "Emebron"
    - "we are Acme Corp" → "Acme Corp"
    - User response after "what company are you with?" → that's the company
-   - ALWAYS capitalize first letter
+   - Keep the original capitalization as provided by the user
+   - Only capitalize if the user types it in all lowercase (e.g., "requio" → "Requio")
 
 4. **phone**: Any phone number
 
