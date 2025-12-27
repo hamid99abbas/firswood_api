@@ -267,13 +267,12 @@ EXTRACTION RULES:
 
 2. **workEmail**: Any email address format
 
-3. **company**: IMPORTANT - Look carefully for company name
-   - If AI asks "what company?" and user responds with a single word → that's the company
-   - "company is Emebron" → "Emebron"
-   - "we are Acme Corp" → "Acme Corp"
+3. **company**: IMPORTANT - Look carefully for company name and preserve exact capitalization
+   - Extract exactly as the user provides it
+   - "Requio" → "Requio" (keep exact spelling)
+   - "ACME Corp" → "ACME Corp" (keep exact spelling)
+   - If user types in all lowercase (e.g., "requio"), then capitalize first letter → "Requio"
    - User response after "what company are you with?" → that's the company
-   - Keep the original capitalization as provided by the user
-   - Only capitalize if the user types it in all lowercase (e.g., "requio" → "Requio")
 
 4. **phone**: Any phone number
 
