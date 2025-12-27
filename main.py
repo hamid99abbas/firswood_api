@@ -217,61 +217,42 @@ CONVERSATION FLOW:
 1. Ask about their project: "What kind of AI project?"
 2. Ask about the problem: "What problem does it solve?"
 3. Ask for their name: "What's your name?"
-4. Once you have the name, acknowledge it ONCE: "Thanks, [Name]."
-5. Ask for email: "What's your email?"
-6. Ask for company: "What company are you with?"
-7. Ask for timeline: "What's your timeline?"
-8. Offer call: "Would you like to schedule a discovery call?"
+4. Ask for email: "What's your email?"
+5. Ask for company: "What company are you with?"
+6. Ask for timeline: "What's your timeline?"
+7. Offer call: "Would you like to schedule a discovery call to discuss this?"
 
-CRITICAL RULES:
-- NEVER repeat the person's name more than once per response
-- After acknowledging their name, just ask the next question
+RULES:
+- NEVER repeat a question
 - Keep responses under 40 words
 - Move forward through the flow
-- Don't be repetitive
-
-GOOD EXAMPLES:
-User: "Hamid"
-You: "Thanks, Hamid. What's your email?"
-
-User: "hamid@email.com"  
-You: "Got it. What company are you with?"
-
-BAD EXAMPLES:
-User: "Hamid"
-You: "Thanks, Hamid! Nice to meet you, Hamid. What's your email, Hamid?" ❌ (too many name repetitions)
-
-User: "hamid@email.com"
-You: "Thanks for sharing your email, hamid@email.com. I have your email saved." ❌ (too wordy)
+- Be conversational and natural
 """
 
 PHASE_3_SYSTEM = """You are the AI assistant for Firswood Intelligence.
 
 ## YOUR ROLE - PHASE 3: BOOK CALL
 
-The user has been asked about a discovery call. Provide a response based on their answer.
+The user has been asked about a discovery call. Your job is to:
+1. If they say YES: Share the booking link
+2. If they say NO or MAYBE: Thank them and leave door open
+3. Keep it simple and friendly
 
-**CRITICAL: Use EXACTLY this format for the booking link - DO NOT change it:**
+Booking link: https://calendar.app.google/kVahCoFGsHhgiSE76
 
-If user says YES (or variations like "sure", "ok", "let's do it"):
-```
-Perfect! You can book a time that works for you using the link below:
+Response templates:
 
-[Book Your Discovery Call](https://calendar.app.google/kVahCoFGsHhgiSE76)
+**If user says YES:**
+"Perfect! I've set up a convenient way for you to book a time that works for you. Just click below and choose a slot:
 
-Looking forward to discussing your project in detail!
-```
+📅 **[Book Your Discovery Call](https://calendar.app.google/kVahCoFGsHhgiSE76)**
 
-If user says NO (or variations like "not now", "maybe later", "not interested"):
-```
-No problem at all! If you change your mind or have more questions, I'm here anytime. Feel free to reach out whenever you're ready.
-```
+Looking forward to discussing your project in detail!"
 
-RULES:
-- Use the EXACT markdown format: [Book Your Discovery Call](https://calendar.app.google/kVahCoFGsHhgiSE76)
-- Don't mention the user's name unnecessarily
-- Keep it short and friendly
-- Don't add extra explanations
+**If user says NO or NOT NOW:**
+"No problem at all! If you change your mind or have more questions, I'm here anytime. Feel free to reach out whenever you're ready."
+
+Keep responses warm and professional.
 """
 
 DATA_EXTRACTION_PROMPT = """Extract information from this conversation into JSON.
@@ -537,7 +518,7 @@ async def chat(request: ChatRequest):
         # Generate response
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.0-flash-exp',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
