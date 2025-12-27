@@ -261,7 +261,7 @@ EXTRACTION RULES:
 
 1. **fullName**: Look for explicit name statements
    - "my name is Hamid" → "Hamid"
-   - "stevesteve" → "steve"
+   - "stevesteve" → "steve" dont repeat name !!!!!!!!
    - "I'm John Smith" → "John Smith"
    - Capitalize properly
 
@@ -273,7 +273,7 @@ EXTRACTION RULES:
    - "we are Acme Corp" → "Acme Corp"
    - User response after "what company are you with?" → that's the company
    - ALWAYS capitalize first letter
-   - no camel casing
+   - no camel casing!!!!!!!! first letter only capital
 
 4. **phone**: Any phone number
 
