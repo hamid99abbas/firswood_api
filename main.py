@@ -1,4 +1,4 @@
-# main.py - 3 Phase Conversation Flow
+# main.py - 3 Phase Conversation Flow (UK English)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -26,7 +26,7 @@ SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or os.getenv("SLACK_WEBH
 
 COMPANY_KNOWLEDGE = """
 # Firswood Intelligence
-AI systems design and delivery practice specializing in production-ready AI.
+AI systems design and delivery practice specialising in production-ready AI.
 Location: Manchester, UK
 Website: www.firswoodintelligence.com
 LinkedIn: linkedin.com/in/haseebkhanproduct
@@ -61,7 +61,7 @@ FAQ_KNOWLEDGE = """
 Yes, AI excels at automating repetitive tasks like processing enquiries, data entry, and routing. We'd assess your current workflow to identify where automation adds the most value.
 
 **What problems are suitable for AI?**
-Best fits: Pattern recognition, data processing, customer support, forecasting, content generation. Less suitable: Tasks requiring deep human judgment, physical manipulation, or highly regulated decisions without human oversight.
+Best fits: Pattern recognition, data processing, customer support, forecasting, content generation. Less suitable: Tasks requiring deep human judgement, physical manipulation, or highly regulated decisions without human oversight.
 
 **Is my business ready for AI?**
 Key indicators: You have defined processes, accessible data (even if messy), team buy-in, and clear success metrics. We can assess readiness in a discovery session.
@@ -70,7 +70,7 @@ Key indicators: You have defined processes, accessible data (even if messy), tea
 Absolutely. We integrate AI on top of existing systems (Salesforce, HubSpot, custom databases) rather than replacing them. AI pulls data, generates insights, and writes back actions.
 
 **Should we fix processes first?**
-Sometimes yes. If processes are fundamentally broken, AI will automate the problem. We help identify whether you need process optimization, AI, or both.
+Sometimes yes. If processes are fundamentally broken, AI will automate the problem. We help identify whether you need process optimisation, AI, or both.
 
 ## AI System Design & Architecture
 
@@ -104,7 +104,7 @@ Yes, through RAG (Retrieval-Augmented Generation). AI searches your docs, finds 
 We implement access controls, encryption, and can deploy on-premise or in your cloud environment. Data never leaves your control.
 
 **Do we need to train models?**
-Usually no. We use pre-trained models (like GPT, Claude) and fine-tune with your data. Custom training only for specialized needs.
+Usually no. We use pre-trained models (like GPT, Claude) and fine-tune with your data. Custom training only for specialised needs.
 
 ## Automation & Operations
 
@@ -112,7 +112,7 @@ Usually no. We use pre-trained models (like GPT, Claude) and fine-tune with your
 Yes - document processing, report generation, email routing, data entry, scheduling. We identify high-impact internal use cases.
 
 **What's safe to automate?**
-Low-risk, high-volume tasks with clear success criteria. Examples: categorizing tickets, extracting invoice data, scheduling meetings.
+Low-risk, high-volume tasks with clear success criteria. Examples: categorising tickets, extracting invoice data, scheduling meetings.
 
 **Where to avoid automation?**
 High-stakes decisions (hiring, medical, legal), creative strategy, relationship-building, or tasks requiring empathy and nuance.
@@ -160,7 +160,7 @@ Varies by risk. Low-risk tasks: minimal. High-stakes: continuous. We design appr
 ## Boundaries & Expectations
 
 **Can AI run the business fully autonomous?**
-No. AI handles specific tasks but needs human oversight, strategy, and judgment. Think "AI assistant" not "AI CEO."
+No. AI handles specific tasks but needs human oversight, strategy, and judgement. Think "AI assistant" not "AI CEO."
 
 **Can AI replace our team?**
 AI augments teams, not replaces them. It handles repetitive work so humans focus on creative, strategic, relationship-building tasks.
@@ -169,13 +169,21 @@ AI augments teams, not replaces them. It handles repetitive work so humans focus
 We guarantee professional delivery and best practices. Business outcomes depend on many factors. We set realistic expectations and measure progress.
 
 **Quick implementation without change?**
-No. Effective AI requires some process change, training, and adoption. We minimize disruption but change is necessary for impact.
+No. Effective AI requires some process change, training, and adoption. We minimise disruption but change is necessary for impact.
 
 **Just plug into ChatGPT?**
 ChatGPT is a tool, not a solution. Production systems need custom prompts, integrations, security, monitoring - that's what we build.
 """
 
 PHASE_1_SYSTEM = f"""You are the AI assistant for Firswood Intelligence.
+
+CRITICAL: Use UK English spelling and terminology in ALL responses:
+- Use 'ise/isation' (organise, realise, specialise)
+- Use 'our' (behaviour, colour, favour)
+- Use 'tre' (centre)
+- Use 'ogue' (dialogue, catalogue)
+- Use 'yse' (analyse)
+- Use UK terms: "mobile" not "cell phone", "post" not "mail", "programme" not "program" (except software programs)
 
 {COMPANY_KNOWLEDGE}
 
@@ -191,6 +199,7 @@ The user is asking questions about AI. Your job is to:
 {FAQ_KNOWLEDGE}
 
 IMPORTANT RULES:
+- ALWAYS use UK English spelling (realise, organise, centre, colour, etc.)
 - If question is in FAQ, use that answer
 - If question is NOT in FAQ, provide a thoughtful answer based on your AI knowledge
 - Never say "I don't know" - always try to help
@@ -201,6 +210,13 @@ IMPORTANT RULES:
 """
 
 PHASE_2_SYSTEM = f"""You are the AI assistant for Firswood Intelligence.
+
+CRITICAL: Use UK English spelling and terminology in ALL responses:
+- Use 'ise/isation' (organise, realise, specialise)
+- Use 'our' (behaviour, colour, favour)
+- Use 'tre' (centre)
+- Use 'ogue' (dialogue, catalogue)
+- Use 'yse' (analyse)
 
 {COMPANY_KNOWLEDGE}
 
@@ -223,13 +239,18 @@ CONVERSATION FLOW:
 7. Offer call: "Would you like to schedule a discovery call to discuss this?"
 
 RULES:
-- NEVER repeat a question
+- ALWAYS use UK English spelling (realise, organise, centre, etc.)
+- NEVER repeat a question!!!!
 - Keep responses under 40 words
 - Move forward through the flow
 - Be conversational and natural
 """
 
 PHASE_3_SYSTEM = """You are the AI assistant for Firswood Intelligence.
+
+CRITICAL: Use UK English spelling and terminology in ALL responses:
+- Use 'ise/isation' (organise, realise, specialise)
+- Use 'our' (behaviour, colour, favour)
 
 ## YOUR ROLE - PHASE 3: BOOK CALL
 
@@ -252,6 +273,7 @@ Looking forward to discussing your project in detail!"
 **If user says NO or NOT NOW:**
 "No problem at all! If you change your mind or have more questions, I'm here anytime. Feel free to reach out whenever you're ready."
 
+CRITICAL: Use UK English spelling in all responses (organise, realise, etc.)
 Keep responses warm and professional.
 """
 
@@ -263,7 +285,7 @@ EXTRACTION RULES:
    - "my name is Hamid" → "Hamid"
    - "stevesteve" → "steve" dont repeat name !!!!!!!!
    - "I'm John Smith" → "John Smith"
-   - Capitalize properly
+   - Capitalise properly
 
 2. **workEmail**: Any email address format
 
@@ -272,24 +294,24 @@ EXTRACTION RULES:
    - "company is Emebron" → "Emebron"
    - "we are Acme Corp" → "Acme Corp"
    - User response after "what company are you with?" → that's the company
-   - ALWAYS capitalize first letter
+   - ALWAYS capitalise first letter
    - no camel casing!!!!!!!! first letter only capital
 
 4. **phone**: Any phone number
 
-5. **projectType**: Categorize based on description
+5. **projectType**: Categorise based on description
    - Customer support → "Customer Support Chatbot"
    - Order tracking → "Order Tracking System"
    - Document questions → "Document Q&A Chatbot"
    - General chatbot → "Chatbot"
 
-6. **timeline**: Extract and standardize
+6. **timeline**: Extract and standardise
    - "3 months", "3-4 months" → "1-3 months"
    - "1 month" → "1 month"
    - "6 months" → "3-6 months"
    - "ASAP", "urgent" → "ASAP"
 
-7. **goal**: Summarize main problem/objective in 1-2 sentences
+7. **goal**: Summarise main problem/objective in 1-2 sentences
 
 CONTEXT AWARENESS:
 - Pay special attention to single-word responses after questions
@@ -321,7 +343,7 @@ class ChatRequest(BaseModel):
     message: str
     conversation_history: Optional[List[Message]] = []
     conversation_id: Optional[str] = None
-    conversation_phase: Optional[str] = "phase1"  # phase1, phase2, phase3
+    conversation_phase: Optional[str] = "phase1"
 
 
 class ChatResponse(BaseModel):
@@ -351,7 +373,6 @@ def detect_phase_transition(message: str, conversation_history: List[Message], c
     """Detect if we should move to next phase"""
     msg_lower = message.lower()
 
-    # Phase 1 → Phase 2: User mentions having a project
     if current_phase == "phase1":
         project_keywords = ['i want', 'i need', 'we need', 'build', 'create', 'develop', 'project', 'yes i have',
                             'yes we have']
@@ -359,10 +380,8 @@ def detect_phase_transition(message: str, conversation_history: List[Message], c
             print(f"[PHASE] Transition 1→2: User has a project")
             return "phase2"
 
-    # Phase 2 → Phase 3: User wants to book call
     if current_phase == "phase2":
         call_keywords = ['schedule', 'book', 'call', 'meeting', 'talk', 'discuss', 'discovery', 'yes']
-        # Also check if AI asked about booking and user said yes
         if len(conversation_history) > 0:
             last_ai_msg = next((m.content for m in reversed(conversation_history) if m.role == "assistant"), "")
             if any(word in last_ai_msg.lower() for word in ['discovery call', 'schedule', 'book']):
@@ -423,20 +442,14 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
 def should_submit_brief(extracted_data: Dict[str, Any], old_phase: str, new_phase: str, user_message: str) -> bool:
     """Check if we should submit brief - when user responds to discovery call question"""
-    # Submit when:
-    # 1. Moving from phase 2 to phase 3 (user said YES)
-    # 2. User said NO to discovery call (we're still in phase 2 but they declined)
-
     has_email = bool(extracted_data.get('workEmail'))
     has_project = bool(extracted_data.get('projectType') or extracted_data.get('goal'))
 
-    # Check if transitioning to phase 3 (YES to call)
     if old_phase == "phase2" and new_phase == "phase3":
         result = has_email and has_project
         print(f"[BRIEF_CHECK] Phase 2→3 (YES): Email: {has_email}, Project: {has_project} → Submit: {result}")
         return result
 
-    # Check if user declined call (stayed in phase 2 but said no)
     if old_phase == "phase2" and new_phase == "phase2":
         decline_keywords = ['no', 'not now', 'maybe later', 'not ready', 'not yet', 'later']
         msg_lower = user_message.lower().strip()
@@ -483,7 +496,6 @@ async def chat(request: ChatRequest):
         print(f"\n[CHAT] Phase: {current_phase}, Message #{message_count}")
         print(f"[CHAT] User: {request.message[:60]}...")
 
-        # Detect phase transition BEFORE generating response
         old_phase = current_phase
         new_phase = detect_phase_transition(
             request.message,
@@ -495,15 +507,13 @@ async def chat(request: ChatRequest):
             print(f"[PHASE] Switching from {old_phase} to {new_phase}")
             current_phase = new_phase
 
-        # Select system prompt based on phase
         if current_phase == "phase1":
             system_prompt = PHASE_1_SYSTEM
         elif current_phase == "phase2":
             system_prompt = PHASE_2_SYSTEM
-        else:  # phase3
+        else:
             system_prompt = PHASE_3_SYSTEM
 
-        # Build conversation contents
         contents = []
         for msg in request.conversation_history:
             role = "user" if msg.role == "user" else "model"
@@ -517,7 +527,6 @@ async def chat(request: ChatRequest):
             parts=[types.Part(text=request.message)]
         ))
 
-        # Generate response
         client = get_gemini_client()
         response = client.models.generate_content(
             model='gemini-2.0-flash-exp',
@@ -528,19 +537,15 @@ async def chat(request: ChatRequest):
             )
         )
 
-        # Extract data and check if should submit
         extracted_data = None
         should_submit = False
 
         if current_phase == "phase2" or new_phase == "phase3":
-            # Extract data when in phase 2 or moving to phase 3
             temp_history = request.conversation_history + [
                 Message(role="user", content=request.message),
                 Message(role="assistant", content=response.text)
             ]
             extracted_data = await extract_data_with_ai(temp_history)
-
-            # Check if should submit (on phase 2→3 transition OR if user declined call)
             should_submit = should_submit_brief(extracted_data, old_phase, new_phase, request.message)
 
         conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
