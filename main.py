@@ -1,4 +1,4 @@
-# main.py - Fixed 3 Phase Conversation Flow
+# main.py - Fixed 3 Phase Conversation Flow v4.2
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from datetime import datetime
 import requests
 import traceback
 
-app = FastAPI(title="Firswood Intelligence Chat API v4.1")
+app = FastAPI(title="Firswood Intelligence Chat API v4.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -252,31 +252,35 @@ CRITICAL: Use UK English spelling and terminology in ALL responses:
 - Use 'ise/isation' (organise, realise, specialise)
 - Use 'our' (behaviour, colour, favour)
 
-## YOUR ROLE - PHASE 3: BOOK CALL
+## YOUR ROLE - PHASE 3: HANDLE CALL RESPONSE
 
-The user has been asked about a discovery call. Your job is to:
-1. If they say YES (including: yes, sure, yup, yeah, okay, ok, sounds good, let's do it): Share the booking link
-2. If they say NO or MAYBE: Thank them and leave door open
-3. Keep it simple and friendly
+The user has been asked about a discovery call. Your job is to respond based on their answer.
 
-IMPORTANT: Recognise positive responses including: yes, yup, sure, yeah, okay, ok, sounds good, absolutely, definitely, let's do it, I'm interested
+IMPORTANT: Recognise these as POSITIVE responses (YES):
+- yes, yup, sure, yeah, okay, ok, sounds good, absolutely, definitely, let's do it, I'm interested, interested, let do, lets, why not, please, book it, schedule it
 
-Booking link: https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M
+IMPORTANT: Recognise these as NEGATIVE/DECLINE responses (NO):
+- no, nope, not now, not right now, maybe later, not ready, not yet, later, not interested, no thanks, not at the moment, perhaps later, i'll think about it, let me think, not sure
 
-Response template for YES:
-
+**If user says YES (positive response):**
 Perfect! Here's a convenient way to book a time that suits you:
 
 [Book Your Discovery Call](https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M)
 
 Looking forward to discussing your project!
 
-Response template for NO:
+**If user says NO or MAYBE (decline/uncertain):**
+No problem at all! If you change your mind or have more questions, I'm here anytime.
 
-No problem at all! If you change your mind or have more questions, I'm here anytime. Feel free to reach out whenever you're ready.
+If you'd like to book a call later, here's the link:
 
-CRITICAL: Use UK English spelling in all responses (organise, realise, etc.)
-Keep responses warm and professional.
+[Book Discovery Call](https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M)
+
+CRITICAL RULES:
+- Use UK English spelling in all responses (organise, realise, etc.)
+- ALWAYS format links as markdown: [Text](URL)
+- Keep responses warm and professional
+- For declines, still provide the booking link as a friendly option
 """
 
 DATA_EXTRACTION_PROMPT = """Extract information from this conversation into JSON.
@@ -377,7 +381,7 @@ def detect_phase_transition(message: str, conversation_history: List[Message], c
 
     if current_phase == "phase1":
         project_keywords = ['i want', 'i need', 'we need', 'build', 'create', 'develop', 'project', 'yes i have',
-                            'yes we have']
+                            'yes we have', "we're working", "i'm working"]
         if any(keyword in msg_lower for keyword in project_keywords):
             print(f"[PHASE] Transition 1→2: User has a project")
             return "phase2"
@@ -387,11 +391,22 @@ def detect_phase_transition(message: str, conversation_history: List[Message], c
         if len(conversation_history) > 0:
             last_ai_msg = next((m.content for m in reversed(conversation_history) if m.role == "assistant"), "")
             if any(word in last_ai_msg.lower() for word in ['discovery call', 'schedule', 'book']):
-                # Expanded positive response keywords
+                # Expanded positive AND negative response keywords
                 positive_keywords = ['yes', 'yup', 'sure', 'yeah', 'okay', 'ok', 'sounds good', 'absolutely',
-                                   'definitely', "let's do it", "i'm interested", 'interested', 'let do', 'lets']
+                                     'definitely', "let's do it", "i'm interested", 'interested', 'let do', 'lets',
+                                     'why not', 'please', 'book it', 'schedule it']
+                negative_keywords = ['no', 'nope', 'not now', 'not right now', 'maybe later', 'not ready',
+                                     'not yet', 'later', 'not interested', 'no thanks', 'not at the moment',
+                                     'perhaps later', "i'll think", 'let me think', 'not sure', 'maybe']
+
+                # Check for positive response
                 if any(keyword in msg_lower for keyword in positive_keywords):
-                    print(f"[PHASE] Transition 2→3: User accepted discovery call with '{message}'")
+                    print(f"[PHASE] Transition 2→3: User ACCEPTED call with '{message}'")
+                    return "phase3"
+
+                # Check for negative response
+                if any(keyword in msg_lower for keyword in negative_keywords):
+                    print(f"[PHASE] Transition 2→3: User DECLINED call with '{message}'")
                     return "phase3"
 
     return current_phase
@@ -450,20 +465,12 @@ def should_submit_brief(extracted_data: Dict[str, Any], old_phase: str, new_phas
     has_email = bool(extracted_data.get('workEmail'))
     has_project = bool(extracted_data.get('projectType') or extracted_data.get('goal'))
 
-    # Submit when transitioning to phase 3 (user accepted call)
+    # Submit when transitioning to phase 3 (any response to call question)
     if old_phase == "phase2" and new_phase == "phase3":
         result = has_email and has_project
-        print(f"[BRIEF_CHECK] Phase 2→3 (User accepted): Email: {has_email}, Project: {has_project} → Submit: {result}")
+        print(
+            f"[BRIEF_CHECK] Phase 2→3 (User responded to call): Email: {has_email}, Project: {has_project} → Submit: {result}")
         return result
-
-    # Also submit if user declines but we have info
-    if old_phase == "phase2" and new_phase == "phase2":
-        decline_keywords = ['no', 'not now', 'maybe later', 'not ready', 'not yet', 'later']
-        msg_lower = user_message.lower().strip()
-        if any(keyword in msg_lower for keyword in decline_keywords):
-            result = has_email and has_project
-            print(f"[BRIEF_CHECK] User declined call: Email: {has_email}, Project: {has_project} → Submit: {result}")
-            return result
 
     return False
 
@@ -472,8 +479,8 @@ def should_submit_brief(extracted_data: Dict[str, Any], old_phase: str, new_phas
 async def root():
     return {
         "service": "Firswood Intelligence Chat API",
-        "version": "4.1.0",
-        "features": ["3-phase conversation", "FAQ answering", "Project discovery", "Fixed booking link"],
+        "version": "4.2.0",
+        "features": ["3-phase conversation", "FAQ answering", "Project discovery", "Fixed decline handling"],
         "endpoints": {
             "chat": "/api/chat",
             "submit_brief": "/api/submit-brief",
@@ -647,4 +654,5 @@ async def submit_brief(request: BriefSubmission):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
