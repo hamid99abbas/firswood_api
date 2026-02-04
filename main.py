@@ -1,4 +1,4 @@
-# main.py - Fixed 3 Phase Conversation Flow v4.2
+# main.py - Fixed 3 Phase Conversation Flow v4.3 with Failure Notifications
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from datetime import datetime
 import requests
 import traceback
 
-app = FastAPI(title="Firswood Intelligence Chat API v4.2")
+app = FastAPI(title="Firswood Intelligence Chat API v4.3")
 
 app.add_middleware(
     CORSMiddleware,
@@ -384,6 +384,57 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
+def send_error_notification_to_slack(error_type: str, error_message: str, user_message: str, 
+                                     conversation_id: str, conversation_phase: str, stack_trace: str = None):
+    """Send Gemini failure notification to Slack"""
+    if not SLACK_WEBHOOK_URL:
+        print("[SLACK_ERROR] No webhook URL configured")
+        return False
+    
+    try:
+        # Truncate long messages
+        def truncate(text, max_len=300):
+            if not text:
+                return "N/A"
+            text = str(text).strip()
+            if len(text) > max_len:
+                return text[:max_len] + "..."
+            return text
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        slack_message = {
+            "text": (
+                f"🚨 *GEMINI MODEL FAILURE*\n\n"
+                f"❌ *Error Type:* {error_type}\n"
+                f"💬 *User Message:* {truncate(user_message, 200)}\n"
+                f"🔄 *Conversation Phase:* {conversation_phase}\n"
+                f"🆔 *Conversation ID:* {conversation_id}\n"
+                f"⏰ *Time:* {timestamp}\n\n"
+                f"📝 *Error Details:*\n```{truncate(error_message, 400)}```"
+                + (f"\n\n🔍 *Stack Trace:*\n```{truncate(stack_trace, 500)}```" if stack_trace else "")
+            )
+        }
+        
+        response = requests.post(
+            SLACK_WEBHOOK_URL,
+            json=slack_message,
+            headers={"Content-Type": "application/json"},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            print(f"[SLACK_ERROR] ✅ Error notification sent to Slack")
+            return True
+        else:
+            print(f"[SLACK_ERROR] ❌ Failed to send: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        print(f"[SLACK_ERROR] ❌ Exception while sending notification: {str(e)}")
+        return False
+
+
 def detect_phase_transition(message: str, conversation_history: List[Message], current_phase: str) -> str:
     """Detect if we should move to next phase"""
     msg_lower = message.lower().strip()
@@ -488,8 +539,8 @@ def should_submit_brief(extracted_data: Dict[str, Any], old_phase: str, new_phas
 async def root():
     return {
         "service": "Firswood Intelligence Chat API",
-        "version": "4.2.0",
-        "features": ["3-phase conversation", "FAQ answering", "Project discovery", "Fixed decline handling"],
+        "version": "4.3.0",
+        "features": ["3-phase conversation", "FAQ answering", "Project discovery", "Fixed decline handling", "Gemini failure notifications"],
         "endpoints": {
             "chat": "/api/chat",
             "submit_brief": "/api/submit-brief",
@@ -510,7 +561,9 @@ async def health_check():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """3-phase conversation handler"""
+    """3-phase conversation handler with Gemini failure notifications"""
+    conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
+    
     try:
         current_phase = request.conversation_phase or "phase1"
         message_count = len(request.conversation_history) + 1
@@ -550,14 +603,39 @@ async def chat(request: ChatRequest):
         ))
 
         client = get_gemini_client()
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.7,
+        
+        # Try to generate response with Gemini
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.7,
+                )
             )
-        )
+            response_text = response.text
+            
+        except Exception as gemini_error:
+            # Gemini model failed - send Slack notification
+            error_type = type(gemini_error).__name__
+            error_message = str(gemini_error)
+            stack_trace = traceback.format_exc()
+            
+            print(f"[GEMINI_ERROR] {error_type}: {error_message}")
+            
+            # Send notification to Slack
+            send_error_notification_to_slack(
+                error_type=error_type,
+                error_message=error_message,
+                user_message=request.message,
+                conversation_id=conversation_id,
+                conversation_phase=current_phase,
+                stack_trace=stack_trace
+            )
+            
+            # Provide fallback response to user
+            response_text = "I apologise, but I'm experiencing technical difficulties at the moment. Our team has been notified. Please try again in a moment, or feel free to book a call directly: https://calendar.google.com/calendar/u/0/appointments/schedules/AcZssZ3r2NuhMrNeocxIGwnAhXo7yBCT1Kx9dVren3wRxRvHWhYMLQZsGahbFbdPJWUcTb4Ki_J50t-M"
 
         extracted_data = None
         should_submit = False
@@ -565,17 +643,15 @@ async def chat(request: ChatRequest):
         if current_phase == "phase2" or new_phase == "phase3":
             temp_history = request.conversation_history + [
                 Message(role="user", content=request.message),
-                Message(role="assistant", content=response.text)
+                Message(role="assistant", content=response_text)
             ]
             extracted_data = await extract_data_with_ai(temp_history)
             should_submit = should_submit_brief(extracted_data, old_phase, new_phase, request.message)
 
-        conversation_id = request.conversation_id or f"conv_{int(datetime.now().timestamp())}"
-
         print(f"[CHAT] ✅ Response sent (phase: {current_phase}, submit_brief: {should_submit})")
 
         return ChatResponse(
-            response=response.text,
+            response=response_text,
             conversation_id=conversation_id,
             timestamp=datetime.now().isoformat(),
             conversation_phase=current_phase,
@@ -584,8 +660,24 @@ async def chat(request: ChatRequest):
         )
 
     except Exception as e:
-        print(f"[ERROR] Chat: {str(e)}")
+        # General error handling
+        error_type = type(e).__name__
+        error_message = str(e)
+        stack_trace = traceback.format_exc()
+        
+        print(f"[ERROR] Chat: {error_message}")
         traceback.print_exc()
+        
+        # Send notification for any critical error
+        send_error_notification_to_slack(
+            error_type=f"API Error - {error_type}",
+            error_message=error_message,
+            user_message=request.message,
+            conversation_id=conversation_id,
+            conversation_phase=request.conversation_phase or "unknown",
+            stack_trace=stack_trace
+        )
+        
         raise HTTPException(status_code=500, detail=str(e))
 
 
