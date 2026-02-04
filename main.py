@@ -484,7 +484,7 @@ async def extract_data_with_ai(conversation_history: List[Message]) -> Dict[str,
 
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-2.5-flashfffff',
             contents=[types.Content(
                 role="user",
                 parts=[types.Part(text=full_prompt)]
@@ -607,7 +607,7 @@ async def chat(request: ChatRequest):
         # Try to generate response with Gemini
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.5-flashffff',
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
