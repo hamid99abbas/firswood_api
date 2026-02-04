@@ -551,7 +551,7 @@ async def chat(request: ChatRequest):
 
         client = get_gemini_client()
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash',
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
